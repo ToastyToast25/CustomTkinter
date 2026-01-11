@@ -1,4 +1,5 @@
 import tkinter
+import copy
 import sys
 from typing import Union, Tuple, Callable, List, Optional
 
@@ -165,7 +166,7 @@ class DropdownMenu(tkinter.Menu, CTkAppearanceModeBaseClass, CTkScalingBaseClass
         elif attribute_name == "command":
             return self._command
         elif attribute_name == "values":
-            return self._values
+            return copy.copy(self._values)
 
         else:
             return super().cget(attribute_name)
