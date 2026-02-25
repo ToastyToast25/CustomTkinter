@@ -46,6 +46,14 @@ from .windows.widgets import CTkCard
 from .windows.widgets import CTkRichTextbox
 from .windows.widgets import CTkCircularProgress
 from .windows.widgets import CTkSearchEntry
+from .windows.widgets import CTkNotificationBanner
+from .windows.widgets import CTkBreadcrumb
+from .windows.widgets import CTkSplitView
+from .windows.widgets import CTkDatePicker
+from .windows.widgets import CTkColorPicker
+from .windows.widgets import CTkChip
+from .windows.widgets import CTkNavigationRail
+from .windows.widgets import CTkLoadingOverlay
 
 # import windows
 from .windows import CTk
