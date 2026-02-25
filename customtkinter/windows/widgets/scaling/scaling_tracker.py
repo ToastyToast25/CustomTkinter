@@ -6,14 +6,14 @@ from typing import Callable
 class ScalingTracker:
     deactivate_automatic_dpi_awareness = False
 
-    window_widgets_dict = {}  # contains window objects as keys with list of widget callbacks as elements
+    window_widgets_dict = {}  # contains window objects as keys with set of widget callbacks as elements
     window_dpi_scaling_dict = {}  # contains window objects as keys and corresponding scaling factors
 
     widget_scaling = 1  # user values which multiply to detected window scaling factor
     window_scaling = 1
 
     update_loop_running = False
-    update_loop_interval = 100  # ms
+    update_loop_interval = 500  # ms (increased from 100ms — DPI changes are rare user-initiated events)
     loop_pause_after_new_scaling = 1500  # ms
 
     @classmethod
@@ -48,8 +48,8 @@ class ScalingTracker:
 
     @classmethod
     def update_scaling_callbacks_all(cls):
-        for window, callback_list in cls.window_widgets_dict.items():
-            for set_scaling_callback in callback_list:
+        for window, callback_set in cls.window_widgets_dict.items():
+            for set_scaling_callback in callback_set:
                 if not cls.deactivate_automatic_dpi_awareness:
                     set_scaling_callback(cls.window_dpi_scaling_dict[window] * cls.widget_scaling,
                                          cls.window_dpi_scaling_dict[window] * cls.window_scaling)
@@ -72,9 +72,9 @@ class ScalingTracker:
         window_root = cls.get_window_root_of_widget(widget)
 
         if window_root not in cls.window_widgets_dict:
-            cls.window_widgets_dict[window_root] = [widget_callback]
+            cls.window_widgets_dict[window_root] = {widget_callback}
         else:
-            cls.window_widgets_dict[window_root].append(widget_callback)
+            cls.window_widgets_dict[window_root].add(widget_callback)
 
         if window_root not in cls.window_dpi_scaling_dict:
             cls.window_dpi_scaling_dict[window_root] = cls.get_window_dpi_scaling(window_root)
@@ -87,23 +87,23 @@ class ScalingTracker:
     def remove_widget(cls, widget_callback, widget):
         window_root = cls.get_window_root_of_widget(widget)
         try:
-            cls.window_widgets_dict[window_root].remove(widget_callback)
-        except:
+            cls.window_widgets_dict[window_root].discard(widget_callback)
+        except (KeyError, ValueError):
             pass
 
     @classmethod
     def remove_window(cls, window_callback, window):
         try:
             del cls.window_widgets_dict[window]
-        except:
+        except KeyError:
             pass
 
     @classmethod
     def add_window(cls, window_callback, window):
         if window not in cls.window_widgets_dict:
-            cls.window_widgets_dict[window] = [window_callback]
+            cls.window_widgets_dict[window] = {window_callback}
         else:
-            cls.window_widgets_dict[window].append(window_callback)
+            cls.window_widgets_dict[window].add(window_callback)
 
         if window not in cls.window_dpi_scaling_dict:
             cls.window_dpi_scaling_dict[window] = cls.get_window_dpi_scaling(window)

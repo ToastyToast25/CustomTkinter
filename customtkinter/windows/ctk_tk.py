@@ -3,6 +3,7 @@ import sys
 import os
 import platform
 import ctypes
+import subprocess
 from typing import Union, Tuple, Optional
 from packaging import version
 
@@ -126,7 +127,7 @@ class CTk(CTK_PARENT_CLASS, CTkAppearanceModeBaseClass, CTkScalingBaseClass):
         self.after(1000, self._set_scaled_min_max)  # Why 1000ms delay? Experience! (Everything tested on Windows 11)
 
     def block_update_dimensions_event(self):
-        self._block_update_dimensions_event = False
+        self._block_update_dimensions_event = True
 
     def unblock_update_dimensions_event(self):
         self._block_update_dimensions_event = False
@@ -253,7 +254,7 @@ class CTk(CTK_PARENT_CLASS, CTkAppearanceModeBaseClass, CTkScalingBaseClass):
         if sys.platform == "darwin" and not cls._deactivate_macos_window_header_manipulation:  # macOS
             if version.parse(platform.python_version()) < version.parse("3.10"):
                 if version.parse(tkinter.Tcl().call("info", "patchlevel")) >= version.parse("8.6.9"):  # Tcl/Tk >= 8.6.9
-                    os.system("defaults write -g NSRequiresAquaSystemAppearance -bool No")
+                    subprocess.run(["defaults", "write", "-g", "NSRequiresAquaSystemAppearance", "-bool", "No"], check=False)
                     # This command allows dark-mode for all programs
 
     @classmethod
@@ -261,7 +262,7 @@ class CTk(CTK_PARENT_CLASS, CTkAppearanceModeBaseClass, CTkScalingBaseClass):
         if sys.platform == "darwin" and not cls._deactivate_macos_window_header_manipulation:  # macOS
             if version.parse(platform.python_version()) < version.parse("3.10"):
                 if version.parse(tkinter.Tcl().call("info", "patchlevel")) >= version.parse("8.6.9"):  # Tcl/Tk >= 8.6.9
-                    os.system("defaults delete -g NSRequiresAquaSystemAppearance")
+                    subprocess.run(["defaults", "delete", "-g", "NSRequiresAquaSystemAppearance"], check=False)
                     # This command reverts the dark-mode setting for all programs.
 
     def _windows_set_titlebar_color(self, color_mode: str):

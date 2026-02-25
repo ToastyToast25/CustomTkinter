@@ -134,6 +134,15 @@ class CTkTreeView(CTkBaseClass):
         self._dnd_target: Optional[str] = None         # drag target node ID
         self._dnd_active: bool = False
 
+        # --- canvas item tracking for efficient redraws ---
+        # Maps node_id -> dict of canvas item IDs created during full redraw.
+        # Keys: "row_bg", "highlight_bg", "focus_ring", "guides" (list),
+        #        "arrow", "icon", "text", "badge_items" (list)
+        self._row_items: Dict[str, Dict[str, Any]] = {}
+        # Cached colors/params from last full redraw for visual-only updates
+        self._cached_colors: Dict[str, str] = {}
+        self._cached_canvas_width: int = 0
+
         # --- canvas and drawing infrastructure ---
         self._canvas = CTkCanvas(master=self,
                                  highlightthickness=0,
@@ -244,6 +253,7 @@ class CTkTreeView(CTkBaseClass):
     def _redraw_tree(self):
         """Rebuild the visible node list and redraw all rows on the inner canvas."""
         self._inner_canvas.delete("all")
+        self._row_items.clear()
         self._visible_nodes = self._build_visible_list()
 
         row_h = self._apply_widget_scaling(self._row_height)
@@ -269,6 +279,21 @@ class CTkTreeView(CTkBaseClass):
         badge_fg = self._apply_appearance_mode(self._badge_text_color)
         highlight_color = self._apply_appearance_mode(self._highlight_color)
 
+        # Cache colors for visual-only redraws
+        self._cached_colors = {
+            "bg_color": bg_color,
+            "text_color": text_color,
+            "select_color": select_color,
+            "select_text_color": select_text_color,
+            "hover_color": hover_color,
+            "guide_color": guide_color,
+            "arrow_color": arrow_color,
+            "badge_bg": badge_bg,
+            "badge_fg": badge_fg,
+            "highlight_color": highlight_color,
+        }
+        self._cached_canvas_width = canvas_width
+
         scaled_indent = self._apply_widget_scaling(self._indent_size)
         font_tuple = self._apply_font_scaling(self._font)
         small_font = (font_tuple[0], max(int(font_tuple[1] * 0.8), -9)) if len(font_tuple) >= 2 else font_tuple
@@ -285,47 +310,57 @@ class CTkTreeView(CTkBaseClass):
             is_focus = node_id == self._focus_node
             is_search_match = node_id in self._search_matches
 
-            # --- Row background ---
+            items: Dict[str, Any] = {}
+
+            # --- Row background (always created, hidden when not needed) ---
             if is_selected:
-                self._inner_canvas.create_rectangle(
-                    0, y_top, canvas_width, y_top + row_h,
-                    fill=select_color, outline=select_color, tags=("row", f"row_{node_id}"),
-                )
+                row_bg_fill = select_color
                 row_text_color = select_text_color
             elif is_hover:
-                self._inner_canvas.create_rectangle(
-                    0, y_top, canvas_width, y_top + row_h,
-                    fill=hover_color, outline=hover_color, tags=("row", f"row_{node_id}"),
-                )
+                row_bg_fill = hover_color
                 row_text_color = text_color
             else:
+                row_bg_fill = ""
                 row_text_color = text_color
 
-            # --- Search highlight background ---
-            if is_search_match and not is_selected:
-                self._inner_canvas.create_rectangle(
-                    0, y_top, canvas_width, y_top + row_h,
-                    fill=highlight_color, outline=highlight_color, tags=("highlight",),
-                )
+            items["row_bg"] = self._inner_canvas.create_rectangle(
+                0, y_top, canvas_width, y_top + row_h,
+                fill=row_bg_fill, outline=row_bg_fill,
+                state="normal" if row_bg_fill else "hidden",
+                tags=("row", f"row_{node_id}"),
+            )
+
+            # --- Search highlight background (always created, hidden when not needed) ---
+            show_highlight = is_search_match and not is_selected
+            items["highlight_bg"] = self._inner_canvas.create_rectangle(
+                0, y_top, canvas_width, y_top + row_h,
+                fill=highlight_color, outline=highlight_color,
+                state="normal" if show_highlight else "hidden",
+                tags=("highlight", f"highlight_{node_id}"),
+            )
+            if show_highlight:
                 row_text_color = text_color
 
-            # --- Focus ring ---
-            if is_focus:
-                self._inner_canvas.create_rectangle(
-                    1, y_top + 1, canvas_width - 1, y_top + row_h - 1,
-                    outline=select_color, width=1, dash=(2, 2),
-                    tags=("focus_ring",),
-                )
+            # --- Focus ring (always created, hidden when not focused) ---
+            items["focus_ring"] = self._inner_canvas.create_rectangle(
+                1, y_top + 1, canvas_width - 1, y_top + row_h - 1,
+                outline=select_color, fill="", width=1, dash=(2, 2),
+                state="normal" if is_focus else "hidden",
+                tags=("focus_ring", f"focus_{node_id}"),
+            )
 
             # --- Indent guide lines ---
+            guide_ids = []
             if self._show_guides and node.depth > 0:
                 for d in range(node.depth):
                     guide_x = int(d * scaled_indent + self._apply_widget_scaling(8) + scaled_indent / 2)
-                    self._inner_canvas.create_line(
+                    gid = self._inner_canvas.create_line(
                         guide_x, y_top, guide_x, y_top + row_h,
                         fill=guide_color, width=1, dash=(1, 3),
                         tags=("guide",),
                     )
+                    guide_ids.append(gid)
+            items["guides"] = guide_ids
 
             # --- Expand/collapse arrow or leaf bullet ---
             has_children = len(node.children) > 0
@@ -333,7 +368,7 @@ class CTkTreeView(CTkBaseClass):
 
             if has_children:
                 arrow_text = self._ARROW_EXPANDED if node.expanded else self._ARROW_COLLAPSED
-                self._inner_canvas.create_text(
+                items["arrow"] = self._inner_canvas.create_text(
                     arrow_x, y_center,
                     text=arrow_text,
                     fill=arrow_color if not is_selected else select_text_color,
@@ -342,19 +377,20 @@ class CTkTreeView(CTkBaseClass):
                     tags=("arrow", f"arrow_{node_id}"),
                 )
             else:
-                self._inner_canvas.create_text(
+                items["arrow"] = self._inner_canvas.create_text(
                     arrow_x, y_center,
                     text=self._LEAF_BULLET,
                     fill=guide_color if not is_selected else select_text_color,
                     font=arrow_font,
                     anchor="center",
-                    tags=("leaf",),
+                    tags=("leaf", f"leaf_{node_id}"),
                 )
+            items["has_children"] = has_children
 
             # --- Icon ---
             text_x = arrow_x + self._apply_widget_scaling(14)
             if node.icon:
-                self._inner_canvas.create_text(
+                items["icon"] = self._inner_canvas.create_text(
                     text_x, y_center,
                     text=node.icon,
                     fill=row_text_color,
@@ -363,9 +399,11 @@ class CTkTreeView(CTkBaseClass):
                     tags=("icon", f"icon_{node_id}"),
                 )
                 text_x += self._apply_widget_scaling(18)
+            else:
+                items["icon"] = None
 
             # --- Node text ---
-            self._inner_canvas.create_text(
+            items["text"] = self._inner_canvas.create_text(
                 text_x, y_center,
                 text=node.text,
                 fill=row_text_color,
@@ -375,6 +413,7 @@ class CTkTreeView(CTkBaseClass):
             )
 
             # --- Badge ---
+            badge_item_ids = []
             if node.badge:
                 badge_text = str(node.badge)
                 # Measure badge text width approximately
@@ -385,35 +424,137 @@ class CTkTreeView(CTkBaseClass):
                 badge_y_bot = y_center + badge_h // 2
                 radius = badge_h // 2
 
-                self._inner_canvas.create_oval(
+                badge_item_ids.append(self._inner_canvas.create_oval(
                     badge_x, badge_y_top, badge_x + badge_h, badge_y_bot,
                     fill=badge_bg if not is_selected else select_text_color,
                     outline="",
-                    tags=("badge",),
-                )
-                self._inner_canvas.create_rectangle(
+                    tags=("badge", f"badge_{node_id}"),
+                ))
+                badge_item_ids.append(self._inner_canvas.create_rectangle(
                     badge_x + radius, badge_y_top, badge_x + badge_w - radius, badge_y_bot,
                     fill=badge_bg if not is_selected else select_text_color,
                     outline="",
-                    tags=("badge",),
-                )
-                self._inner_canvas.create_oval(
+                    tags=("badge", f"badge_{node_id}"),
+                ))
+                badge_item_ids.append(self._inner_canvas.create_oval(
                     badge_x + badge_w - badge_h, badge_y_top, badge_x + badge_w, badge_y_bot,
                     fill=badge_bg if not is_selected else select_text_color,
                     outline="",
-                    tags=("badge",),
-                )
-                self._inner_canvas.create_text(
+                    tags=("badge", f"badge_{node_id}"),
+                ))
+                badge_item_ids.append(self._inner_canvas.create_text(
                     badge_x + badge_w / 2, y_center,
                     text=badge_text,
                     fill=badge_fg if not is_selected else select_color,
                     font=small_font,
                     anchor="center",
-                    tags=("badge_text",),
-                )
+                    tags=("badge_text", f"badge_text_{node_id}"),
+                ))
+            items["badge_items"] = badge_item_ids
+
+            self._row_items[node_id] = items
 
         # Update scroll region
         self._inner_canvas.configure(scrollregion=(0, 0, canvas_width, max(total_height, 1)))
+
+    def _redraw_visual_only(self):
+        """Fast path: update only colors/visibility of existing canvas items.
+
+        Used when only hover, selection, or focus state has changed (no
+        structural tree changes).  Falls back to full ``_redraw_tree`` if
+        the cached item map is empty or stale.
+        """
+        # Guard: fall back to full redraw if item map is not populated
+        if not self._row_items or not self._cached_colors:
+            self._redraw_tree()
+            return
+
+        # Verify the visible node set hasn't changed
+        if set(self._row_items.keys()) != set(self._visible_nodes):
+            self._redraw_tree()
+            return
+
+        cc = self._cached_colors
+        text_color = cc["text_color"]
+        select_color = cc["select_color"]
+        select_text_color = cc["select_text_color"]
+        hover_color = cc["hover_color"]
+        guide_color = cc["guide_color"]
+        arrow_color = cc["arrow_color"]
+        badge_bg = cc["badge_bg"]
+        badge_fg = cc["badge_fg"]
+        highlight_color = cc["highlight_color"]
+
+        ic = self._inner_canvas  # local alias for speed
+
+        for node_id, items in self._row_items.items():
+            node = self._nodes.get(node_id)
+            if node is None:
+                # Stale data -- fall back
+                self._redraw_tree()
+                return
+
+            is_selected = node_id in self._selected
+            is_hover = node_id == self._hover_node and not is_selected
+            is_focus = node_id == self._focus_node
+            is_search_match = node_id in self._search_matches
+
+            # --- Row background ---
+            if is_selected:
+                row_bg_fill = select_color
+                row_text_color = select_text_color
+            elif is_hover:
+                row_bg_fill = hover_color
+                row_text_color = text_color
+            else:
+                row_bg_fill = ""
+                row_text_color = text_color
+
+            row_bg_id = items["row_bg"]
+            if row_bg_fill:
+                ic.itemconfigure(row_bg_id, fill=row_bg_fill, outline=row_bg_fill, state="normal")
+            else:
+                ic.itemconfigure(row_bg_id, state="hidden")
+
+            # --- Search highlight ---
+            show_highlight = is_search_match and not is_selected
+            hl_id = items["highlight_bg"]
+            if show_highlight:
+                ic.itemconfigure(hl_id, state="normal")
+                row_text_color = text_color
+            else:
+                ic.itemconfigure(hl_id, state="hidden")
+
+            # --- Focus ring ---
+            fr_id = items["focus_ring"]
+            ic.itemconfigure(fr_id, state="normal" if is_focus else "hidden")
+
+            # --- Arrow / leaf bullet color ---
+            arrow_id = items["arrow"]
+            has_children = items["has_children"]
+            if has_children:
+                ic.itemconfigure(arrow_id, fill=arrow_color if not is_selected else select_text_color)
+            else:
+                ic.itemconfigure(arrow_id, fill=guide_color if not is_selected else select_text_color)
+
+            # --- Icon color ---
+            icon_id = items.get("icon")
+            if icon_id is not None:
+                ic.itemconfigure(icon_id, fill=row_text_color)
+
+            # --- Text color ---
+            text_id = items["text"]
+            ic.itemconfigure(text_id, fill=row_text_color)
+
+            # --- Badge colors ---
+            badge_ids = items["badge_items"]
+            if badge_ids:
+                # First 3 are shape items (ovals + rect), last is text
+                badge_shape_fill = badge_bg if not is_selected else select_text_color
+                badge_text_fill = badge_fg if not is_selected else select_color
+                for bid in badge_ids[:-1]:
+                    ic.itemconfigure(bid, fill=badge_shape_fill)
+                ic.itemconfigure(badge_ids[-1], fill=badge_text_fill)
 
     def _build_visible_list(self) -> List[str]:
         """Build the ordered list of visible node IDs based on expansion state."""
@@ -522,7 +663,7 @@ class CTkTreeView(CTkBaseClass):
         if node_id is None:
             if self._select_mode != "none":
                 self._selected.clear()
-                self._redraw_tree()
+                self._redraw_visual_only()
                 self._fire_command()
             return
 
@@ -543,7 +684,7 @@ class CTkTreeView(CTkBaseClass):
             self._focus_node = node_id
         # "none" mode: no selection
 
-        self._redraw_tree()
+        self._redraw_visual_only()
         self._fire_command()
 
     def _on_double_click(self, event):
@@ -557,17 +698,17 @@ class CTkTreeView(CTkBaseClass):
         node_id = self._node_at_y(event.y)
         if node_id != self._hover_node:
             self._hover_node = node_id
-            self._redraw_tree()
+            self._redraw_visual_only()
 
     def _on_leave(self, event):
         if self._hover_node is not None:
             self._hover_node = None
-            self._redraw_tree()
+            self._redraw_visual_only()
 
     def _on_focus_in(self, event):
         if self._focus_node is None and self._visible_nodes:
             self._focus_node = self._visible_nodes[0]
-            self._redraw_tree()
+            self._redraw_visual_only()
 
     def _on_focus_out(self, event):
         pass  # keep focus node for when focus returns
@@ -591,9 +732,10 @@ class CTkTreeView(CTkBaseClass):
             target = self._node_at_y(event.y)
             if target != self._dnd_target:
                 self._dnd_target = target
-                self._redraw_tree()
+                self._redraw_visual_only()
 
-                # Draw drop indicator
+                # Remove old drop indicator and draw new one
+                self._inner_canvas.delete("dnd_indicator")
                 if self._dnd_target and self._dnd_target in self._visible_nodes:
                     idx = self._visible_nodes.index(self._dnd_target)
                     row_h = self._apply_widget_scaling(self._row_height)
@@ -646,7 +788,7 @@ class CTkTreeView(CTkBaseClass):
 
         if self._focus_node is None:
             self._focus_node = self._visible_nodes[0] if self._visible_nodes else None
-            self._redraw_tree()
+            self._redraw_visual_only()
             return
 
         if self._focus_node not in self._visible_nodes:
@@ -658,13 +800,13 @@ class CTkTreeView(CTkBaseClass):
             if idx > 0:
                 self._focus_node = self._visible_nodes[idx - 1]
                 self._ensure_visible(self._focus_node)
-                self._redraw_tree()
+                self._redraw_visual_only()
 
         elif event.keysym == "Down":
             if idx < len(self._visible_nodes) - 1:
                 self._focus_node = self._visible_nodes[idx + 1]
                 self._ensure_visible(self._focus_node)
-                self._redraw_tree()
+                self._redraw_visual_only()
 
         elif event.keysym == "Right":
             node = self._nodes.get(self._focus_node)
@@ -675,7 +817,7 @@ class CTkTreeView(CTkBaseClass):
                     # Move focus to first child
                     self._focus_node = node.children[0]
                     self._ensure_visible(self._focus_node)
-                    self._redraw_tree()
+                    self._redraw_visual_only()
 
         elif event.keysym == "Left":
             node = self._nodes.get(self._focus_node)
@@ -685,7 +827,7 @@ class CTkTreeView(CTkBaseClass):
                 # Move focus to parent
                 self._focus_node = node.parent_id
                 self._ensure_visible(self._focus_node)
-                self._redraw_tree()
+                self._redraw_visual_only()
 
         elif event.keysym == "Return":
             node = self._nodes.get(self._focus_node)
@@ -695,25 +837,25 @@ class CTkTreeView(CTkBaseClass):
         elif event.keysym == "space":
             if self._select_mode == "single":
                 self._selected = [self._focus_node]
-                self._redraw_tree()
+                self._redraw_visual_only()
                 self._fire_command()
             elif self._select_mode == "multiple":
                 if self._focus_node in self._selected:
                     self._selected.remove(self._focus_node)
                 else:
                     self._selected.append(self._focus_node)
-                self._redraw_tree()
+                self._redraw_visual_only()
                 self._fire_command()
 
         elif event.keysym == "Home":
             self._focus_node = self._visible_nodes[0]
             self._ensure_visible(self._focus_node)
-            self._redraw_tree()
+            self._redraw_visual_only()
 
         elif event.keysym == "End":
             self._focus_node = self._visible_nodes[-1]
             self._ensure_visible(self._focus_node)
-            self._redraw_tree()
+            self._redraw_visual_only()
 
     # ---------------------------------------------------------------
     # Command callback
@@ -948,13 +1090,13 @@ class CTkTreeView(CTkBaseClass):
         """Deselect the given node."""
         if node_id in self._selected:
             self._selected.remove(node_id)
-            self._redraw_tree()
+            self._redraw_visual_only()
             self._fire_command()
 
     def deselect_all(self):
         """Clear all selections."""
         self._selected.clear()
-        self._redraw_tree()
+        self._redraw_visual_only()
         self._fire_command()
 
     # ---------------------------------------------------------------

@@ -46,16 +46,27 @@ class FontManager:
         num_fonts_added = add_font_resource_ex(byref(path_buffer), flags, 0)
         return bool(min(num_fonts_added, 1))
 
+    _VALID_FONT_EXTENSIONS = {".ttf", ".otf", ".woff", ".woff2"}
+
     @classmethod
     def load_font(cls, font_path: str) -> bool:
+        # Validate font file extension
+        _, ext = os.path.splitext(font_path)
+        if ext.lower() not in cls._VALID_FONT_EXTENSIONS:
+            sys.stderr.write(f"FontManager error: invalid font extension '{ext}'. Expected one of {cls._VALID_FONT_EXTENSIONS}\n")
+            return False
+
+        # Resolve symlinks to prevent symlink attacks
+        resolved_path = os.path.realpath(font_path)
+
         # Windows
         if sys.platform.startswith("win"):
-            return cls.windows_load_font(font_path, private=True, enumerable=False)
+            return cls.windows_load_font(resolved_path, private=True, enumerable=False)
 
         # Linux
         elif sys.platform.startswith("linux"):
             try:
-                shutil.copy(font_path, os.path.expanduser(cls.linux_font_path))
+                shutil.copy(resolved_path, os.path.expanduser(cls.linux_font_path))
                 return True
             except Exception as err:
                 sys.stderr.write("FontManager error: " + str(err) + "\n")

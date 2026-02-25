@@ -19,6 +19,7 @@ from .theme import ThemeManager
 class CTkScrollableFrame(tkinter.Frame, CTkAppearanceModeBaseClass, CTkScalingBaseClass):
     # class-level registry for mouse wheel isolation
     _instances: list = []
+    _canvas_to_instance: dict = {}  # O(1) lookup: canvas widget id -> instance
     _global_bindings_set: bool = False
 
     @classmethod
@@ -57,13 +58,17 @@ class CTkScrollableFrame(tkinter.Frame, CTkAppearanceModeBaseClass, CTkScalingBa
     @classmethod
     def _dispatch_mouse_wheel(cls, event):
         """Route mouse wheel event to the correct instance under the cursor."""
-        for instance in cls._instances:
-            try:
-                if instance.check_if_master_is_canvas(event.widget):
-                    instance._mouse_wheel_all(event)
-                    return
-            except Exception:
-                continue
+        # Walk up the widget tree to find if this event is inside a registered canvas
+        widget = event.widget
+        max_depth = 50
+        depth = 0
+        while widget is not None and depth < max_depth:
+            widget_id = id(widget)
+            if widget_id in cls._canvas_to_instance:
+                cls._canvas_to_instance[widget_id]._mouse_wheel_all(event)
+                return
+            widget = getattr(widget, 'master', None)
+            depth += 1
 
     @classmethod
     def _dispatch_shift_press(cls, event):
@@ -137,6 +142,7 @@ class CTkScrollableFrame(tkinter.Frame, CTkAppearanceModeBaseClass, CTkScalingBa
 
         # register instance and set up shared global bindings
         self._instances.append(self)
+        self._canvas_to_instance[id(self._parent_canvas)] = self
         self._ensure_global_bindings(self)
         self._create_window_id = self._parent_canvas.create_window(0, 0, window=self, anchor="nw")
 
@@ -172,6 +178,7 @@ class CTkScrollableFrame(tkinter.Frame, CTkAppearanceModeBaseClass, CTkScalingBa
             self._instances.remove(self)
         except ValueError:
             pass
+        self._canvas_to_instance.pop(id(self._parent_canvas), None)
 
         # remove global bindings if this was the last instance
         self._remove_global_bindings(self)
@@ -373,11 +380,13 @@ class CTkScrollableFrame(tkinter.Frame, CTkAppearanceModeBaseClass, CTkScalingBa
     def _keyboard_shift_release_all(self, event):
         self._shift_pressed = False
 
-    def check_if_master_is_canvas(self, widget):
+    def check_if_master_is_canvas(self, widget, _depth=0):
+        if _depth > 50:
+            return False
         if widget == self._parent_canvas:
             return True
         elif widget.master is not None:
-            return self.check_if_master_is_canvas(widget.master)
+            return self.check_if_master_is_canvas(widget.master, _depth + 1)
         else:
             return False
 

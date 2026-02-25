@@ -13,10 +13,10 @@ def _is_tk_alive(widget) -> bool:
 
 class AppearanceModeTracker:
 
-    callback_list = []
+    callback_set: set = set()
     app_list = []
     update_loop_running = False
-    update_loop_interval = 30  # milliseconds
+    update_loop_interval = 500  # milliseconds (increased from 30ms — theme changes are rare user events)
 
     appearance_mode_set_by = "system"
     appearance_mode = 0  # Light (standard)
@@ -32,7 +32,7 @@ class AppearanceModeTracker:
 
     @classmethod
     def add(cls, callback: Callable, widget=None):
-        cls.callback_list.append(callback)
+        cls.callback_set.add(callback)
 
         if widget is not None:
             app = cls.get_tk_root_of_widget(widget)
@@ -45,10 +45,7 @@ class AppearanceModeTracker:
 
     @classmethod
     def remove(cls, callback: Callable):
-        try:
-            cls.callback_list.remove(callback)
-        except ValueError:
-            return
+        cls.callback_set.discard(callback)
 
     @classmethod
     def remove_app(cls, app):
@@ -78,19 +75,12 @@ class AppearanceModeTracker:
 
     @classmethod
     def update_callbacks(cls):
-        if cls.appearance_mode == 0:
-            for callback in cls.callback_list:
-                try:
-                    callback("Light")
-                except Exception:
-                    continue
-
-        elif cls.appearance_mode == 1:
-            for callback in cls.callback_list:
-                try:
-                    callback("Dark")
-                except Exception:
-                    continue
+        mode_string = "Light" if cls.appearance_mode == 0 else "Dark"
+        for callback in list(cls.callback_set):
+            try:
+                callback(mode_string)
+            except Exception:
+                continue
 
     @classmethod
     def update(cls):

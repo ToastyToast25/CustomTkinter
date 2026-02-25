@@ -29,6 +29,10 @@ class CTkBaseClass(tkinter.Frame, CTkAppearanceModeBaseClass, CTkScalingBaseClas
 
     _cursor_manipulation_enabled: bool = True
 
+    # Registry mapping master widgets to sets of child CTk widgets for bg propagation
+    _master_bg_children: dict = {}  # {master_widget: set of child CTkBaseClass instances}
+    _master_bg_patched: set = set()  # masters whose configure has been wrapped
+
     def __init__(self,
                  master: Any,
                  width: int = 0,
@@ -56,10 +60,7 @@ class CTkBaseClass(tkinter.Frame, CTkAppearanceModeBaseClass, CTkScalingBaseClas
                           height=self._apply_widget_scaling(self._desired_height))
 
         # save latest geometry function and kwargs
-        class GeometryCallDict(TypedDict):
-            function: Callable
-            kwargs: dict
-        self._last_geometry_manager_call: Union[GeometryCallDict, None] = None
+        self._last_geometry_manager_call: Union[dict, None] = None
 
         # background color
         self._bg_color: Union[str, Tuple[str, str]] = self._detect_color_of_master() if bg_color == "transparent" else self._check_color_type(bg_color, transparency=True)
@@ -72,27 +73,52 @@ class CTkBaseClass(tkinter.Frame, CTkAppearanceModeBaseClass, CTkScalingBaseClas
 
         # overwrite configure methods of master when master is tkinter widget, so that bg changes get applied on child CTk widget as well
         if isinstance(self.master, (tkinter.Tk, tkinter.Toplevel, tkinter.Frame, tkinter.LabelFrame, ttk.Frame, ttk.LabelFrame, ttk.Notebook)) and not isinstance(self.master, (CTkBaseClass, CTkAppearanceModeBaseClass)):
-            master_old_configure = self.master.config
+            # Register this child in the master's bg-propagation set
+            if self.master not in CTkBaseClass._master_bg_children:
+                CTkBaseClass._master_bg_children[self.master] = set()
+            CTkBaseClass._master_bg_children[self.master].add(self)
 
-            def new_configure(*args, **kwargs):
-                if "bg" in kwargs:
-                    self.configure(bg_color=kwargs["bg"])
-                elif "background" in kwargs:
-                    self.configure(bg_color=kwargs["background"])
+            # Install a single wrapper per master (not per child)
+            if self.master not in CTkBaseClass._master_bg_patched:
+                master_old_configure = self.master.config
 
-                # args[0] is dict when attribute gets changed by widget[<attribute>] syntax
-                elif len(args) > 0 and type(args[0]) == dict:
-                    if "bg" in args[0]:
-                        self.configure(bg_color=args[0]["bg"])
-                    elif "background" in args[0]:
-                        self.configure(bg_color=args[0]["background"])
-                master_old_configure(*args, **kwargs)
+                def new_configure(master_ref=self.master, _old=master_old_configure):
+                    def _wrapper(*args, **kwargs):
+                        bg_color = None
+                        if "bg" in kwargs:
+                            bg_color = kwargs["bg"]
+                        elif "background" in kwargs:
+                            bg_color = kwargs["background"]
+                        elif len(args) > 0 and type(args[0]) == dict:
+                            if "bg" in args[0]:
+                                bg_color = args[0]["bg"]
+                            elif "background" in args[0]:
+                                bg_color = args[0]["background"]
 
-            self.master.config = new_configure
-            self.master.configure = new_configure
+                        if bg_color is not None:
+                            children = CTkBaseClass._master_bg_children.get(master_ref, set())
+                            for child in list(children):
+                                try:
+                                    child.configure(bg_color=bg_color)
+                                except Exception:
+                                    children.discard(child)
+
+                        _old(*args, **kwargs)
+                    return _wrapper
+
+                wrapper = new_configure()
+                self.master.config = wrapper
+                self.master.configure = wrapper
+                CTkBaseClass._master_bg_patched.add(self.master)
 
     def destroy(self):
         """ Destroy this and all descendants widgets. """
+
+        # unregister from master bg-propagation registry
+        if self.master in CTkBaseClass._master_bg_children:
+            CTkBaseClass._master_bg_children[self.master].discard(self)
+            if not CTkBaseClass._master_bg_children[self.master]:
+                del CTkBaseClass._master_bg_children[self.master]
 
         # call destroy methods of super classes
         tkinter.Frame.destroy(self)
@@ -220,7 +246,6 @@ class CTkBaseClass(tkinter.Frame, CTkAppearanceModeBaseClass, CTkScalingBaseClas
     def _set_appearance_mode(self, mode_string):
         super()._set_appearance_mode(mode_string)
         self._draw()
-        super().update_idletasks()
 
     def _set_scaling(self, new_widget_scaling, new_window_scaling):
         super()._set_scaling(new_widget_scaling, new_window_scaling)

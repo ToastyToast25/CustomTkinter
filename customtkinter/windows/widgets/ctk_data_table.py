@@ -1,4 +1,5 @@
 import tkinter
+import tkinter.font
 import sys
 import math
 from typing import Union, Tuple, Optional, Callable, Any, Dict, List
@@ -616,13 +617,12 @@ class CTkDataTable(CTkBaseClass):
     # ------------------------------------------------------------------
 
     def _measure_text_width(self, text: str, font: tuple) -> int:
-        """Measure text width in pixels using a temporary canvas text item."""
-        tmp_id = self._body_canvas.create_text(0, 0, text=text, font=font, anchor="nw")
-        bbox = self._body_canvas.bbox(tmp_id)
-        self._body_canvas.delete(tmp_id)
-        if bbox:
-            return bbox[2] - bbox[0]
-        return len(text) * 8  # fallback estimate
+        """Measure text width in pixels using tkinter.font.Font.measure()."""
+        try:
+            tk_font = tkinter.font.Font(font=font)
+            return tk_font.measure(text)
+        except Exception:
+            return len(text) * 8  # fallback estimate
 
     def _truncate_text(self, text: str, max_width: int, font: tuple) -> str:
         """Truncate text with ellipsis if it exceeds max_width pixels."""

@@ -125,19 +125,7 @@ class CTkCircularProgress(CTkBaseClass):
         progress = self._apply_appearance_mode(self._progress_color)
         text_c = self._apply_appearance_mode(self._text_color)
 
-        # clear canvas
-        self._canvas.delete("all")
-        self._canvas.configure(bg=bg if bg != "transparent" else fg)
-
-        # track circle (background ring)
-        self._track_id = self._canvas.create_arc(
-            pad, pad, s - pad, s - pad,
-            start=0, extent=359.99,
-            style="arc", width=lw,
-            outline=track
-        )
-
-        # progress arc
+        # progress arc angles
         if self._mode == "indeterminate":
             arc_start = self._spin_angle
             arc_extent = -self._spin_extent
@@ -145,41 +133,84 @@ class CTkCircularProgress(CTkBaseClass):
             arc_start = self._start_angle
             arc_extent = -self._value * 360  # negative = clockwise
 
-        self._arc_id = self._canvas.create_arc(
-            pad, pad, s - pad, s - pad,
-            start=arc_start, extent=arc_extent,
-            style="arc", width=lw,
-            outline=progress
-        )
+        # Create items on first draw, update on subsequent draws
+        if self._track_id is None:
+            # First draw — create all canvas items
+            self._canvas.configure(bg=bg if bg != "transparent" else fg)
 
-        # center text
-        if self._show_text:
-            font = self._font
-            if isinstance(font, CTkFont):
-                font = (font.cget("family"), int(scaled(font.cget("size"))),
-                        font.cget("weight"))
-            elif isinstance(font, tuple) and len(font) >= 2:
-                font = (font[0], int(scaled(font[1]))) + font[2:]
-
-            # Use text_callback if provided, otherwise fall back to text_format
-            if self._text_callback is not None:
-                try:
-                    text = self._text_callback(self._value)
-                except Exception:
-                    text = f"{self._value:.0%}"
-            else:
-                try:
-                    text = self._text_format.format(self._value)
-                except (ValueError, KeyError):
-                    text = f"{self._value:.0%}"
-
-            self._text_id = self._canvas.create_text(
-                s / 2, s / 2,
-                text=text,
-                fill=text_c,
-                font=font,
-                anchor="center"
+            self._track_id = self._canvas.create_arc(
+                pad, pad, s - pad, s - pad,
+                start=0, extent=359.99,
+                style="arc", width=lw,
+                outline=track
             )
+
+            self._arc_id = self._canvas.create_arc(
+                pad, pad, s - pad, s - pad,
+                start=arc_start, extent=arc_extent,
+                style="arc", width=lw,
+                outline=progress
+            )
+
+            if self._show_text:
+                font = self._get_scaled_font(scaled)
+                text = self._get_display_text()
+                self._text_id = self._canvas.create_text(
+                    s / 2, s / 2,
+                    text=text, fill=text_c, font=font, anchor="center"
+                )
+        else:
+            # Subsequent draws — update existing items in place
+            self._canvas.coords(self._track_id, pad, pad, s - pad, s - pad)
+            self._canvas.itemconfigure(self._track_id, width=lw)
+
+            self._canvas.coords(self._arc_id, pad, pad, s - pad, s - pad)
+            self._canvas.itemconfigure(self._arc_id, start=arc_start, extent=arc_extent, width=lw)
+
+            if not no_color_updates:
+                self._canvas.configure(bg=bg if bg != "transparent" else fg)
+                self._canvas.itemconfigure(self._track_id, outline=track)
+                self._canvas.itemconfigure(self._arc_id, outline=progress)
+
+            if self._show_text and self._text_id is not None:
+                font = self._get_scaled_font(scaled)
+                text = self._get_display_text()
+                self._canvas.coords(self._text_id, s / 2, s / 2)
+                self._canvas.itemconfigure(self._text_id, text=text, font=font)
+                if not no_color_updates:
+                    self._canvas.itemconfigure(self._text_id, fill=text_c)
+            elif self._show_text and self._text_id is None:
+                font = self._get_scaled_font(scaled)
+                text = self._get_display_text()
+                self._text_id = self._canvas.create_text(
+                    s / 2, s / 2,
+                    text=text, fill=text_c, font=font, anchor="center"
+                )
+            elif not self._show_text and self._text_id is not None:
+                self._canvas.delete(self._text_id)
+                self._text_id = None
+
+    def _get_scaled_font(self, scaled):
+        """Get the font tuple with scaling applied."""
+        font = self._font
+        if isinstance(font, CTkFont):
+            return (font.cget("family"), int(scaled(font.cget("size"))), font.cget("weight"))
+        elif isinstance(font, tuple) and len(font) >= 2:
+            return (font[0], int(scaled(font[1]))) + font[2:]
+        return font
+
+    def _get_display_text(self) -> str:
+        """Get the text to display in the center."""
+        if self._text_callback is not None:
+            try:
+                return self._text_callback(self._value)
+            except Exception:
+                return f"{self._value:.0%}"
+        else:
+            try:
+                return self._text_format.format(self._value)
+            except (ValueError, KeyError):
+                return f"{self._value:.0%}"
 
     def set(self, value: float, animate: bool = False, duration: int = 300):
         """Set the progress value (0.0 to 1.0)."""
@@ -274,6 +305,11 @@ class CTkCircularProgress(CTkBaseClass):
         super()._set_dimensions(width=self._size, height=self._size)
         scaled_size = self._apply_widget_scaling(self._size)
         self._canvas.configure(width=scaled_size, height=scaled_size)
+        # Force full rebuild on size change
+        self._canvas.delete("all")
+        self._track_id = None
+        self._arc_id = None
+        self._text_id = None
         self._draw()
 
     def destroy(self):

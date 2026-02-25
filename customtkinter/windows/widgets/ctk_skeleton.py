@@ -1,4 +1,5 @@
 import tkinter
+import math
 from typing import Union, Tuple, Optional, Any
 
 from .core_rendering import CTkCanvas
@@ -57,6 +58,8 @@ class CTkSkeleton(CTkBaseClass):
         self._animate = animate
         self._phase = 0.0
         self._after_id = None
+        self._cached_base_hex: str = None
+        self._cached_shimmer_hex: str = None
 
         # build
         self.grid_rowconfigure(0, weight=1)
@@ -103,6 +106,10 @@ class CTkSkeleton(CTkBaseClass):
         if not self._canvas.winfo_exists():
             return
 
+        # invalidate cached shimmer hex on redraws (appearance mode may have changed)
+        if not no_color_updates:
+            self._invalidate_color_cache()
+
         # derive shimmer color on first draw (canvas must exist for winfo_rgb)
         if self._shimmer_color is None:
             self._derive_shimmer_color()
@@ -141,16 +148,25 @@ class CTkSkeleton(CTkBaseClass):
         self._phase = 0.0
         self._shimmer_tick()
 
+    def _invalidate_color_cache(self):
+        """Clear cached hex colors so they are recomputed on next tick."""
+        self._cached_base_hex = None
+        self._cached_shimmer_hex = None
+
     def _shimmer_tick(self):
         if not self._animate:
             return
-        import math
         if self._shimmer_color is None:
             self._derive_shimmer_color()
+
+        # Cache hex color conversions (only change on appearance mode switch)
+        if self._cached_base_hex is None:
+            self._cached_base_hex = self._color_to_hex(self._apply_appearance_mode(self._fg_color))
+        if self._cached_shimmer_hex is None:
+            self._cached_shimmer_hex = self._color_to_hex(self._apply_appearance_mode(self._shimmer_color))
+
         t = (math.sin(self._phase * math.pi * 2) + 1) / 2
-        base = self._color_to_hex(self._apply_appearance_mode(self._fg_color))
-        shimmer = self._color_to_hex(self._apply_appearance_mode(self._shimmer_color))
-        color = self._lerp_hex(base, shimmer, t)
+        color = self._lerp_hex(self._cached_base_hex, self._cached_shimmer_hex, t)
         try:
             self._canvas.itemconfig("inner_parts", fill=color, outline=color)
         except Exception:

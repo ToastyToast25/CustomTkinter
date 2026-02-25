@@ -10,6 +10,7 @@ class ThemeManager:
     theme: dict = {}  # contains all the theme data
     _built_in_themes: List[str] = ["blue", "green", "gold", "dark-blue", "purple"]
     _currently_loaded_theme: Union[str, None] = None
+    _VALID_THEME_EXTENSIONS = {".json"}
 
     @classmethod
     def load_theme(cls, theme_name_or_path: str):
@@ -20,7 +21,13 @@ class ThemeManager:
             with open(os.path.join(customtkinter_path, "assets", "themes", f"{theme_name_or_path}.json"), "r") as f:
                 cls.theme = json.load(f)
         else:
-            with open(theme_name_or_path, "r") as f:
+            # Validate custom theme path
+            resolved = pathlib.Path(theme_name_or_path).resolve()
+            if resolved.suffix.lower() not in cls._VALID_THEME_EXTENSIONS:
+                raise ValueError(f"Theme file must be a .json file, got: '{resolved.suffix}'")
+            if not resolved.is_file():
+                raise FileNotFoundError(f"Theme file not found: '{resolved}'")
+            with open(str(resolved), "r") as f:
                 cls.theme = json.load(f)
 
         # store theme path for saving
@@ -52,7 +59,7 @@ class ThemeManager:
     def save_theme(cls):
         if cls._currently_loaded_theme is not None:
             if cls._currently_loaded_theme not in cls._built_in_themes:
-                with open(cls._currently_loaded_theme, "r") as f:
+                with open(cls._currently_loaded_theme, "w") as f:
                     json.dump(cls.theme, f, indent=2)
             else:
                 raise ValueError(f"cannot modify builtin theme '{cls._currently_loaded_theme}'")

@@ -9,6 +9,8 @@ except ImportError:
 from .scaling_tracker import ScalingTracker
 from ..font import CTkFont
 
+_GEOMETRY_RE = re.compile(r"((\d+)x(\d+)){0,1}(\+{0,1}([+-]{0,1}\d+)\+{0,1}([+-]{0,1}\d+)){0,1}")
+
 
 class CTkScalingBaseClass:
     """
@@ -63,30 +65,35 @@ class CTkScalingBaseClass:
     # https://github.com/python/cpython/issues/56767
     # Hence, we must ensure any integer value stays that way
     def _apply_widget_scaling(self, value: Union[int, float]) -> Union[int, float]:
-        assert self.__scaling_type == "widget"
+        if self.__scaling_type != "widget":
+            raise TypeError(f"_apply_widget_scaling called on '{self.__scaling_type}' type, expected 'widget'")
         if isinstance(value, float):
             return value * self.__widget_scaling
         else:
             return int(value * self.__widget_scaling)
 
     def _reverse_widget_scaling(self, value: Union[int, float]) -> Union[int, float]:
-        assert self.__scaling_type == "widget"
+        if self.__scaling_type != "widget":
+            raise TypeError(f"_reverse_widget_scaling called on '{self.__scaling_type}' type, expected 'widget'")
         if isinstance(value, float):
             return value / self.__widget_scaling
         else:
             return int(value / self.__widget_scaling)
 
     def _apply_window_scaling(self, value: Union[int, float]) -> int:
-        assert self.__scaling_type == "window"
+        if self.__scaling_type != "window":
+            raise TypeError(f"_apply_window_scaling called on '{self.__scaling_type}' type, expected 'window'")
         return int(value * self.__window_scaling)
 
     def _reverse_window_scaling(self, scaled_value: Union[int, float]) -> int:
-        assert self.__scaling_type == "window"
+        if self.__scaling_type != "window":
+            raise TypeError(f"_reverse_window_scaling called on '{self.__scaling_type}' type, expected 'window'")
         return int(scaled_value / self.__window_scaling)
 
     def _apply_font_scaling(self, font: Union[Tuple, CTkFont]) -> tuple:
         """ Takes CTkFont object and returns tuple font with scaled size, has to be called again for every change of font object """
-        assert self.__scaling_type == "widget"
+        if self.__scaling_type != "widget":
+            raise TypeError(f"_apply_font_scaling called on '{self.__scaling_type}' type, expected 'widget'")
 
         if type(font) == tuple:
             if len(font) == 1:
@@ -104,7 +111,8 @@ class CTkScalingBaseClass:
             raise ValueError(f"Can not scale font '{font}' of type {type(font)}. font needs to be tuple or instance of CTkFont")
 
     def _apply_argument_scaling(self, kwargs: dict) -> dict:
-        assert self.__scaling_type == "widget"
+        if self.__scaling_type != "widget":
+            raise TypeError(f"_apply_argument_scaling called on '{self.__scaling_type}' type, expected 'widget'")
 
         scaled_kwargs = copy.copy(kwargs)
 
@@ -132,7 +140,7 @@ class CTkScalingBaseClass:
     def _parse_geometry_string(geometry_string: str) -> tuple:
         #                 index:   1                   2           3          4             5       6
         # regex group structure: ('<width>x<height>', '<width>', '<height>', '+-<x>+-<y>', '-<x>', '-<y>')
-        result = re.search(r"((\d+)x(\d+)){0,1}(\+{0,1}([+-]{0,1}\d+)\+{0,1}([+-]{0,1}\d+)){0,1}", geometry_string)
+        result = _GEOMETRY_RE.search(geometry_string)
 
         width = int(result.group(2)) if result.group(2) is not None else None
         height = int(result.group(3)) if result.group(3) is not None else None
@@ -142,7 +150,8 @@ class CTkScalingBaseClass:
         return width, height, x, y
 
     def _apply_geometry_scaling(self, geometry_string: str) -> str:
-        assert self.__scaling_type == "window"
+        if self.__scaling_type != "window":
+            raise TypeError(f"_apply_geometry_scaling called on '{self.__scaling_type}' type, expected 'window'")
 
         width, height, x, y = self._parse_geometry_string(geometry_string)
 
@@ -156,7 +165,8 @@ class CTkScalingBaseClass:
             return f"{round(width * self.__window_scaling)}x{round(height * self.__window_scaling)}+{x}+{y}"
 
     def _reverse_geometry_scaling(self, scaled_geometry_string: str) -> str:
-        assert self.__scaling_type == "window"
+        if self.__scaling_type != "window":
+            raise TypeError(f"_reverse_geometry_scaling called on '{self.__scaling_type}' type, expected 'window'")
 
         width, height, x, y = self._parse_geometry_string(scaled_geometry_string)
 

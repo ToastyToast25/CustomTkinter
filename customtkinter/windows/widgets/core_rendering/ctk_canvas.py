@@ -101,6 +101,11 @@ class CTkCanvas(tkinter.Canvas):
         return coords
 
     def itemconfig(self, tag_or_id, *args, **kwargs):
+        # Fast path: if no AA circles exist on this canvas, skip all the special handling
+        if not self._aa_circle_canvas_ids:
+            super().itemconfigure(tag_or_id, *args, **kwargs)
+            return
+
         kwargs_except_outline = kwargs.copy()
         if "outline" in kwargs_except_outline:
             del kwargs_except_outline["outline"]

@@ -1,6 +1,7 @@
 import tkinter
 import webbrowser
 from datetime import datetime
+from urllib.parse import urlparse
 from typing import Union, Tuple, Optional, Any, Callable, List, Dict
 
 from .ctk_textbox import CTkTextbox
@@ -370,14 +371,15 @@ class CTkRichTextbox(CTkTextbox):
         self.tag_bind(tag_name, "<Leave>", lambda e: self._textbox.configure(cursor=""))
 
         # Determine the click action
-        if isinstance(url_or_callback, str) and url_or_callback.startswith("http"):
+        parsed = urlparse(url_or_callback) if isinstance(url_or_callback, str) else None
+        if parsed is not None and parsed.scheme in ("http", "https"):
             url = url_or_callback
             callback = lambda e, u=url: webbrowser.open(u)
         elif callable(url_or_callback):
             cb = url_or_callback
             callback = lambda e, c=cb: c()
         else:
-            # Treat non-http strings as plain text with no action
+            # Treat non-http/https strings as plain text with no action
             callback = None
 
         if callback is not None:
@@ -468,7 +470,8 @@ class CTkRichTextbox(CTkTextbox):
         self.tag_bind(tag_name, "<Enter>", lambda e: self._textbox.configure(cursor="hand2"))
         self.tag_bind(tag_name, "<Leave>", lambda e: self._textbox.configure(cursor=""))
 
-        if isinstance(url_or_callback, str) and url_or_callback.startswith("http"):
+        parsed = urlparse(url_or_callback) if isinstance(url_or_callback, str) else None
+        if parsed is not None and parsed.scheme in ("http", "https"):
             url = url_or_callback
             self.tag_bind(tag_name, "<Button-1>", lambda e, u=url: webbrowser.open(u))
         elif callable(url_or_callback):

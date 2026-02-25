@@ -1,8 +1,38 @@
+from collections import OrderedDict
 from typing import Tuple, Dict, Callable, List
 try:
     from PIL import Image, ImageTk
 except ImportError:
     pass
+
+
+class _BoundedImageCache:
+    """LRU-bounded cache for scaled PhotoImage objects. Max 8 entries by default."""
+
+    def __init__(self, maxsize: int = 8):
+        self._maxsize = maxsize
+        self._cache: OrderedDict = OrderedDict()
+
+    def get(self, key):
+        if key in self._cache:
+            self._cache.move_to_end(key)
+            return self._cache[key]
+        return None
+
+    def put(self, key, value):
+        if key in self._cache:
+            self._cache.move_to_end(key)
+            self._cache[key] = value
+        else:
+            if len(self._cache) >= self._maxsize:
+                self._cache.popitem(last=False)
+            self._cache[key] = value
+
+    def clear(self):
+        self._cache.clear()
+
+    def __contains__(self, key):
+        return key in self._cache
 
 
 class CTkImage:
@@ -32,8 +62,8 @@ class CTkImage:
         self._size = size
 
         self._configure_callback_list: List[Callable] = []
-        self._scaled_light_photo_images: Dict[Tuple[int, int], ImageTk.PhotoImage] = {}
-        self._scaled_dark_photo_images: Dict[Tuple[int, int], ImageTk.PhotoImage] = {}
+        self._scaled_light_photo_images = _BoundedImageCache(maxsize=8)
+        self._scaled_dark_photo_images = _BoundedImageCache(maxsize=8)
 
     @classmethod
     def _check_pil_import(cls):
@@ -53,12 +83,12 @@ class CTkImage:
     def configure(self, **kwargs):
         if "light_image" in kwargs:
             self._light_image = kwargs.pop("light_image")
-            self._scaled_light_photo_images = {}
+            self._scaled_light_photo_images.clear()
             self._check_images()
 
         if "dark_image" in kwargs:
             self._dark_image = kwargs.pop("dark_image")
-            self._scaled_dark_photo_images = {}
+            self._scaled_dark_photo_images.clear()
             self._check_images()
 
         if "size" in kwargs:
@@ -95,18 +125,20 @@ class CTkImage:
         return round(self._size[0] * widget_scaling), round(self._size[1] * widget_scaling)
 
     def _get_scaled_light_photo_image(self, scaled_size: Tuple[int, int]) -> "ImageTk.PhotoImage":
-        if scaled_size in self._scaled_light_photo_images:
-            return self._scaled_light_photo_images[scaled_size]
-        else:
-            self._scaled_light_photo_images[scaled_size] = ImageTk.PhotoImage(self._light_image.resize(scaled_size))
-            return self._scaled_light_photo_images[scaled_size]
+        cached = self._scaled_light_photo_images.get(scaled_size)
+        if cached is not None:
+            return cached
+        photo = ImageTk.PhotoImage(self._light_image.resize(scaled_size))
+        self._scaled_light_photo_images.put(scaled_size, photo)
+        return photo
 
     def _get_scaled_dark_photo_image(self, scaled_size: Tuple[int, int]) -> "ImageTk.PhotoImage":
-        if scaled_size in self._scaled_dark_photo_images:
-            return self._scaled_dark_photo_images[scaled_size]
-        else:
-            self._scaled_dark_photo_images[scaled_size] = ImageTk.PhotoImage(self._dark_image.resize(scaled_size))
-            return self._scaled_dark_photo_images[scaled_size]
+        cached = self._scaled_dark_photo_images.get(scaled_size)
+        if cached is not None:
+            return cached
+        photo = ImageTk.PhotoImage(self._dark_image.resize(scaled_size))
+        self._scaled_dark_photo_images.put(scaled_size, photo)
+        return photo
 
     def create_scaled_photo_image(self, widget_scaling: float, appearance_mode: str) -> "ImageTk.PhotoImage":
         scaled_size = self._get_scaled_size(widget_scaling)
