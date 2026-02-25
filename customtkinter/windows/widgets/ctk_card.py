@@ -107,9 +107,16 @@ class CTkCard(CTkFrame):
         self.bind("<Return>", self._on_key_activate, add="+")
         self.bind("<space>", self._on_key_activate, add="+")
 
+        # fade-in animation state
+        self._fade_after_id = None
+        self._fade_step = 0
+
         # Apply initial visual state if selected or disabled at construction time
         if self._state == "disabled" or self._selected:
             self.after(10, self._apply_static_border)
+
+        # start fade-in entrance animation
+        self.after(10, self._start_fade_in)
 
     # ------------------------------------------------------------------
     #  Effective "rest" border: accounts for disabled > selected > base
@@ -330,6 +337,38 @@ class CTkCard(CTkFrame):
             self.select()
 
     # ------------------------------------------------------------------
+    #  Fade-in entrance animation
+    # ------------------------------------------------------------------
+
+    def _start_fade_in(self):
+        """Animate the card fading in by transitioning fg_color from bg to actual."""
+        self._fade_step = 0
+        try:
+            self._bg_hex = self._color_to_hex(
+                self._apply_appearance_mode(self._bg_color))
+            self._fg_hex = self._color_to_hex(
+                self._apply_appearance_mode(self._fg_color))
+        except Exception:
+            return
+        self._fade_tick()
+
+    def _fade_tick(self):
+        total = 8  # ~130ms at 16ms/frame
+        if self._fade_step > total:
+            self._fade_after_id = None
+            return
+        t = self._fade_step / total
+        eased = t * t * (3.0 - 2.0 * t)  # smoothstep
+        current = self._lerp_hex(self._bg_hex, self._fg_hex, eased)
+        try:
+            self._canvas.itemconfig("inner_parts", fill=current, outline=current)
+        except Exception:
+            self._fade_after_id = None
+            return
+        self._fade_step += 1
+        self._fade_after_id = self.after(16, self._fade_tick)
+
+    # ------------------------------------------------------------------
     #  Utility (unchanged)
     # ------------------------------------------------------------------
 
@@ -366,6 +405,9 @@ class CTkCard(CTkFrame):
         if self._click_after_id is not None:
             self.after_cancel(self._click_after_id)
             self._click_after_id = None
+        if self._fade_after_id is not None:
+            self.after_cancel(self._fade_after_id)
+            self._fade_after_id = None
         super().destroy()
 
     # ------------------------------------------------------------------

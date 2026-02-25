@@ -7,10 +7,11 @@ and destroy for each widget. Requires a display (tkinter).
 
 import tkinter
 import sys
+import os
 import time
 
 # Add customtkinter to path
-sys.path.insert(0, r"C:\Users\Administrator\Pictures\CustomTkinter")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import customtkinter as ctk
 
 

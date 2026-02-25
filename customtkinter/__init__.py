@@ -60,6 +60,10 @@ from .windows.widgets import CTkTreeView
 from .windows.widgets import CTkNumberEntry
 from .windows.widgets import CTkToggleSwitch
 from .windows.widgets import CTkRangeSlider
+from .windows.widgets import CTkRating
+from .windows.widgets import CTkAvatar
+from .windows.widgets import CTkStepper
+from .windows.widgets import CTkAccordion
 
 # import windows
 from .windows import CTk

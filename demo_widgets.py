@@ -3,9 +3,10 @@ Interactive demo for all 10 polished CustomTkinter widgets.
 """
 
 import sys
+import os
 import tkinter
 
-sys.path.insert(0, r"C:\Users\Administrator\Pictures\CustomTkinter")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import customtkinter as ctk
 
 
@@ -20,6 +21,10 @@ class WidgetDemo(ctk.CTk):
         self._main = ctk.CTkScrollableFrame(self, fg_color="transparent")
         self._main.pack(fill="both", expand=True, padx=16, pady=16)
 
+        self._build_rating_section()
+        self._build_avatar_section()
+        self._build_stepper_section()
+        self._build_accordion_section()
         self._build_tooltip_section()
         self._build_status_badge_section()
         self._build_card_section()
@@ -36,6 +41,123 @@ class WidgetDemo(ctk.CTk):
         lbl.pack(anchor="w", pady=(20, 6))
         sep = ctk.CTkFrame(self._main, height=2, fg_color=("#c0c0c0", "#404040"))
         sep.pack(fill="x", pady=(0, 10))
+
+    # ================================================================
+    # NEW: CTkRating
+    # ================================================================
+    def _build_rating_section(self):
+        self._section_label("CTkRating")
+        row = ctk.CTkFrame(self._main, fg_color="transparent")
+        row.pack(fill="x")
+
+        rating_lbl = ctk.CTkLabel(row, text="Rating: 0.0")
+        rating_lbl.pack(side="right", padx=8)
+
+        def on_rate(val):
+            rating_lbl.configure(text=f"Rating: {val}")
+
+        r1 = ctk.CTkRating(row, max_stars=5, command=on_rate)
+        r1.pack(side="left", padx=8)
+
+        ctk.CTkLabel(row, text="Half-star:").pack(side="left", padx=(16, 4))
+        r2 = ctk.CTkRating(row, max_stars=5, allow_half=True, initial_value=3.5,
+                            star_color=("#EC4899", "#F472B6"))
+        r2.pack(side="left", padx=4)
+
+        ctk.CTkLabel(row, text="Read-only:").pack(side="left", padx=(16, 4))
+        r3 = ctk.CTkRating(row, max_stars=5, initial_value=4, state="readonly",
+                            star_color=("#22C55E", "#4ADE80"))
+        r3.pack(side="left", padx=4)
+
+    # ================================================================
+    # NEW: CTkAvatar
+    # ================================================================
+    def _build_avatar_section(self):
+        self._section_label("CTkAvatar")
+        row = ctk.CTkFrame(self._main, fg_color="transparent")
+        row.pack(fill="x")
+
+        for name, status in [("John Doe", "online"), ("Alice B", "away"),
+                              ("Bob C", "busy"), ("Eve", "offline"), ("?", None)]:
+            frame = ctk.CTkFrame(row, fg_color="transparent")
+            frame.pack(side="left", padx=12)
+            av = ctk.CTkAvatar(frame, text=name, size="large", status=status)
+            av.pack()
+            ctk.CTkLabel(frame, text=name, font=ctk.CTkFont(size=11)).pack(pady=(4, 0))
+            if status:
+                ctk.CTkLabel(frame, text=status, font=ctk.CTkFont(size=10),
+                             text_color=("gray50", "gray60")).pack()
+
+        # Size variants
+        ctk.CTkLabel(row, text="  Sizes:").pack(side="left", padx=(24, 4))
+        for size in ("small", "medium", "large", "xlarge"):
+            ctk.CTkAvatar(row, text="AB", size=size).pack(side="left", padx=4)
+
+    # ================================================================
+    # NEW: CTkStepper
+    # ================================================================
+    def _build_stepper_section(self):
+        self._section_label("CTkStepper")
+
+        stepper = ctk.CTkStepper(self._main,
+                                  steps=["Account", "Profile", "Settings", "Review", "Complete"],
+                                  width=700, height=80)
+        stepper.pack(fill="x", pady=4)
+
+        row = ctk.CTkFrame(self._main, fg_color="transparent")
+        row.pack(fill="x", pady=4)
+
+        step_lbl = ctk.CTkLabel(row, text="Step: 1/5")
+        step_lbl.pack(side="right", padx=8)
+
+        def update_label():
+            s = stepper.get_step()
+            step_lbl.configure(text=f"Step: {s + 1}/5")
+
+        def go_prev():
+            stepper.previous()
+            update_label()
+        def go_next():
+            stepper.next()
+            update_label()
+        def do_reset():
+            stepper.reset()
+            update_label()
+        def do_complete():
+            stepper.complete()
+            step_lbl.configure(text="All complete!")
+
+        ctk.CTkButton(row, text="Previous", width=80, command=go_prev).pack(side="left", padx=4)
+        ctk.CTkButton(row, text="Next", width=80, command=go_next).pack(side="left", padx=4)
+        ctk.CTkButton(row, text="Reset", width=80, command=do_reset).pack(side="left", padx=4)
+        ctk.CTkButton(row, text="Complete All", width=100, command=do_complete).pack(side="left", padx=4)
+
+    # ================================================================
+    # NEW: CTkAccordion
+    # ================================================================
+    def _build_accordion_section(self):
+        self._section_label("CTkAccordion")
+
+        accordion = ctk.CTkAccordion(self._main, exclusive=True)
+        accordion.pack(fill="x", pady=4)
+
+        # Section 1
+        s1 = accordion.add_section("General Settings", collapsed=False)
+        ctk.CTkSwitch(s1, text="Enable notifications").pack(padx=16, pady=4, anchor="w")
+        ctk.CTkSwitch(s1, text="Auto-save").pack(padx=16, pady=4, anchor="w")
+        ctk.CTkEntry(s1, placeholder_text="Username").pack(padx=16, pady=4, fill="x")
+
+        # Section 2
+        s2 = accordion.add_section("Appearance")
+        ctk.CTkLabel(s2, text="Font size:").pack(padx=16, pady=4, anchor="w")
+        ctk.CTkSlider(s2, from_=8, to=24, number_of_steps=16).pack(padx=16, pady=4, fill="x")
+        ctk.CTkOptionMenu(s2, values=["Light", "Dark", "System"]).pack(padx=16, pady=4)
+
+        # Section 3
+        s3 = accordion.add_section("Advanced")
+        ctk.CTkLabel(s3, text="Thread count:").pack(padx=16, pady=4, anchor="w")
+        ctk.CTkSlider(s3, from_=1, to=16, number_of_steps=15).pack(padx=16, pady=4, fill="x")
+        ctk.CTkCheckBox(s3, text="Debug mode").pack(padx=16, pady=4, anchor="w")
 
     # ================================================================
     # 1. CTkToolTip

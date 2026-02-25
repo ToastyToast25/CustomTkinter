@@ -39,3 +39,7 @@ from .ctk_tree_view import CTkTreeView
 from .ctk_number_entry import CTkNumberEntry
 from .ctk_toggle_switch import CTkToggleSwitch
 from .ctk_range_slider import CTkRangeSlider
+from .ctk_rating import CTkRating
+from .ctk_avatar import CTkAvatar
+from .ctk_stepper import CTkStepper
+from .ctk_accordion import CTkAccordion
