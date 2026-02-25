@@ -264,7 +264,8 @@ class CTkButton(CTkBaseClass):
         if self._image is not None:
 
             if self._image_label is None:
-                self._image_label = tkinter.Label(master=self, anchor=self._anchor)
+                self._image_label = tkinter.Label(master=self, anchor=self._anchor,
+                                                  borderwidth=0, padx=0, pady=0)
                 self._update_image()  # set image
                 self._create_grid()
 
