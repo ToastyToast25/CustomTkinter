@@ -14,9 +14,20 @@ class CTkCircularProgress(CTkBaseClass):
     Shows a ring/arc that fills based on the value (0.0 to 1.0).
     Optionally displays percentage text in the center.
 
+    Supports two modes:
+        - "determinate" (default): Arc fills proportionally to the value.
+        - "indeterminate": A partial arc spins continuously. Use start()/stop().
+
     Usage:
         cp = CTkCircularProgress(parent, size=100, line_width=8)
         cp.set(0.75)  # 75%
+
+        # Indeterminate spinner
+        spinner = CTkCircularProgress(parent, mode="indeterminate")
+        spinner.start()
+
+        # Custom text callback
+        cp = CTkCircularProgress(parent, text_callback=lambda v: f"{int(v*100)} files")
     """
 
     def __init__(self,
@@ -32,9 +43,12 @@ class CTkCircularProgress(CTkBaseClass):
 
                  show_text: bool = True,
                  text_format: str = "{:.0%}",
+                 text_callback: Optional[Callable[[float], str]] = None,
                  font: Optional[Union[tuple, CTkFont]] = None,
                  variable: Optional[tkinter.Variable] = None,
                  start_angle: float = 90,
+                 mode: str = "determinate",
+                 on_complete: Optional[Callable] = None,
                  **kwargs):
 
         super().__init__(master=master, bg_color=bg_color, width=size, height=size, **kwargs)
@@ -53,6 +67,7 @@ class CTkCircularProgress(CTkBaseClass):
         # text
         self._show_text = show_text
         self._text_format = text_format
+        self._text_callback = text_callback
         self._font = font or CTkFont(size=max(10, size // 5))
 
         # variable
@@ -63,6 +78,14 @@ class CTkCircularProgress(CTkBaseClass):
         # animation
         self._target_value = 0.0
         self._anim_after_id = None
+        self._on_complete = on_complete
+
+        # mode (determinate / indeterminate)
+        self._mode = mode
+        self._spinning = False
+        self._spin_angle = 0
+        self._spin_extent = 90
+        self._spin_after_id = None
 
         # build canvas
         self.grid_rowconfigure(0, weight=1)
@@ -115,10 +138,16 @@ class CTkCircularProgress(CTkBaseClass):
         )
 
         # progress arc
-        extent = -self._value * 360  # negative = clockwise
+        if self._mode == "indeterminate":
+            arc_start = self._spin_angle
+            arc_extent = -self._spin_extent
+        else:
+            arc_start = self._start_angle
+            arc_extent = -self._value * 360  # negative = clockwise
+
         self._arc_id = self._canvas.create_arc(
             pad, pad, s - pad, s - pad,
-            start=self._start_angle, extent=extent,
+            start=arc_start, extent=arc_extent,
             style="arc", width=lw,
             outline=progress
         )
@@ -132,10 +161,17 @@ class CTkCircularProgress(CTkBaseClass):
             elif isinstance(font, tuple) and len(font) >= 2:
                 font = (font[0], int(scaled(font[1]))) + font[2:]
 
-            try:
-                text = self._text_format.format(self._value)
-            except (ValueError, KeyError):
-                text = f"{self._value:.0%}"
+            # Use text_callback if provided, otherwise fall back to text_format
+            if self._text_callback is not None:
+                try:
+                    text = self._text_callback(self._value)
+                except Exception:
+                    text = f"{self._value:.0%}"
+            else:
+                try:
+                    text = self._text_format.format(self._value)
+                except (ValueError, KeyError):
+                    text = f"{self._value:.0%}"
 
             self._text_id = self._canvas.create_text(
                 s / 2, s / 2,
@@ -162,6 +198,34 @@ class CTkCircularProgress(CTkBaseClass):
                 self._variable.set(value)
                 self._variable_callback_blocked = False
 
+    def step(self, amount: float = 0.1):
+        """Increment the value by amount, clamping at 1.0."""
+        new_value = min(1.0, self._value + amount)
+        self.set(new_value)
+
+    def start(self):
+        """Start the indeterminate spinner. Only effective when mode='indeterminate'."""
+        if self._mode != "indeterminate":
+            return
+        if self._spinning:
+            return
+        self._spinning = True
+        self._spin_tick()
+
+    def stop(self):
+        """Stop the indeterminate spinner at its current position."""
+        self._spinning = False
+        if self._spin_after_id is not None:
+            self.after_cancel(self._spin_after_id)
+            self._spin_after_id = None
+
+    def _spin_tick(self):
+        """Advance the spinner arc by one tick. ~60fps, ~1 revolution per second."""
+        if self._spinning:
+            self._spin_angle = (self._spin_angle + 6) % 360  # 6 deg * 60fps ~ 360 deg/sec
+            self._draw()
+            self._spin_after_id = self.after(16, self._spin_tick)
+
     def _animate_to(self, duration: int):
         """Animate from current value to target value."""
         if self._anim_after_id is not None:
@@ -184,6 +248,9 @@ class CTkCircularProgress(CTkBaseClass):
                 self._anim_after_id = self.after(interval, tick)
             else:
                 self._anim_after_id = None
+                # Fire on_complete callback when animation finishes at 1.0
+                if self._on_complete is not None and self._value >= 1.0:
+                    self._on_complete()
 
         tick()
 
@@ -213,6 +280,10 @@ class CTkCircularProgress(CTkBaseClass):
         if self._anim_after_id is not None:
             self.after_cancel(self._anim_after_id)
             self._anim_after_id = None
+        if self._spin_after_id is not None:
+            self.after_cancel(self._spin_after_id)
+            self._spin_after_id = None
+        self._spinning = False
         if self._variable is not None and self._variable_callback_name is not None:
             self._variable.trace_remove("write", self._variable_callback_name)
         super().destroy()
@@ -240,6 +311,9 @@ class CTkCircularProgress(CTkBaseClass):
         if "text_format" in kwargs:
             self._text_format = kwargs.pop("text_format")
             require_redraw = True
+        if "text_callback" in kwargs:
+            self._text_callback = kwargs.pop("text_callback")
+            require_redraw = True
         if "variable" in kwargs:
             if self._variable is not None:
                 self._variable.trace_remove("write", self._variable_callback_name)
@@ -250,6 +324,16 @@ class CTkCircularProgress(CTkBaseClass):
         if "start_angle" in kwargs:
             self._start_angle = kwargs.pop("start_angle")
             require_redraw = True
+        if "mode" in kwargs:
+            new_mode = kwargs.pop("mode")
+            if new_mode != self._mode:
+                # Stop spinner if switching away from indeterminate
+                if self._mode == "indeterminate":
+                    self.stop()
+                self._mode = new_mode
+                require_redraw = True
+        if "on_complete" in kwargs:
+            self._on_complete = kwargs.pop("on_complete")
         super().configure(require_redraw=require_redraw, **kwargs)
 
     def cget(self, attribute_name: str):
@@ -267,9 +351,17 @@ class CTkCircularProgress(CTkBaseClass):
             return self._show_text
         elif attribute_name == "text_format":
             return self._text_format
+        elif attribute_name == "text_callback":
+            return self._text_callback
         elif attribute_name == "variable":
             return self._variable
         elif attribute_name == "start_angle":
             return self._start_angle
+        elif attribute_name == "mode":
+            return self._mode
+        elif attribute_name == "on_complete":
+            return self._on_complete
+        elif attribute_name == "value":
+            return self._value
         else:
             return super().cget(attribute_name)

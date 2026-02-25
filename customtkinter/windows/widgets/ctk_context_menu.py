@@ -1,6 +1,6 @@
 import tkinter
 import sys
-from typing import Union, Tuple, Optional, Callable, Any, List
+from typing import Union, Tuple, Optional, Callable, Any, List, Dict
 
 from .theme import ThemeManager
 from .font import CTkFont
@@ -49,6 +49,8 @@ class CTkContextMenu(tkinter.Menu, CTkAppearanceModeBaseClass, CTkScalingBaseCla
         self._font = CTkFont() if font is None else font
         self._items: List[dict] = []
         self._bound_widgets: List[Any] = []
+        self._check_variables: List[tkinter.BooleanVar] = []
+        self._radio_variables: List[tkinter.Variable] = []
 
         self._configure_appearance()
 
@@ -127,6 +129,164 @@ class CTkContextMenu(tkinter.Menu, CTkAppearanceModeBaseClass, CTkScalingBaseCla
         self.add_cascade(label=f"  {label}", menu=submenu, **kwargs)
         return submenu
 
+    def add_checkbutton(self, label: str,
+                        variable: Optional[tkinter.BooleanVar] = None,
+                        command: Optional[Callable] = None,
+                        accelerator: str = "",
+                        state: str = "normal",
+                        **kwargs):
+        """Add a checkbutton menu item with optional state tracking.
+
+        Args:
+            label: Display text for the item.
+            variable: A BooleanVar to track checked state. If None, an
+                internal BooleanVar is created automatically.
+            command: Callback invoked when the item is toggled.
+            accelerator: Keyboard shortcut text shown on the right side.
+            state: 'normal' or 'disabled'.
+            **kwargs: Additional options forwarded to tkinter Menu.add_checkbutton.
+        """
+        if variable is None:
+            variable = tkinter.BooleanVar(value=False)
+        self._check_variables.append(variable)
+
+        self._items.append({
+            "type": "checkbutton",
+            "label": label,
+            "command": command,
+            "accelerator": accelerator,
+            "state": state,
+            "variable": variable,
+        })
+
+        opts: Dict[str, Any] = {
+            "label": f"  {label}",
+            "variable": variable,
+            "onvalue": True,
+            "offvalue": False,
+            "state": state,
+        }
+        if command is not None:
+            opts["command"] = command
+        if accelerator:
+            opts["accelerator"] = f"  {accelerator}"
+        opts.update(kwargs)
+        tkinter.Menu.add_checkbutton(self, **opts)
+
+    def add_radiobutton(self, label: str,
+                        variable: Optional[tkinter.Variable] = None,
+                        value: Any = None,
+                        command: Optional[Callable] = None,
+                        accelerator: str = "",
+                        state: str = "normal",
+                        **kwargs):
+        """Add a radiobutton menu item for mutually exclusive choices.
+
+        Args:
+            label: Display text for the item.
+            variable: A tkinter Variable shared among the radio group. If
+                None, an internal StringVar is created (each call gets its
+                own, so callers should supply a shared variable).
+            value: The value assigned to *variable* when this item is
+                selected. Defaults to *label* if not provided.
+            command: Callback invoked when the item is selected.
+            accelerator: Keyboard shortcut text shown on the right side.
+            state: 'normal' or 'disabled'.
+            **kwargs: Additional options forwarded to tkinter Menu.add_radiobutton.
+        """
+        if variable is None:
+            variable = tkinter.StringVar()
+        if variable not in self._radio_variables:
+            self._radio_variables.append(variable)
+        if value is None:
+            value = label
+
+        self._items.append({
+            "type": "radiobutton",
+            "label": label,
+            "command": command,
+            "accelerator": accelerator,
+            "state": state,
+            "variable": variable,
+            "value": value,
+        })
+
+        opts: Dict[str, Any] = {
+            "label": f"  {label}",
+            "variable": variable,
+            "value": value,
+            "state": state,
+        }
+        if command is not None:
+            opts["command"] = command
+        if accelerator:
+            opts["accelerator"] = f"  {accelerator}"
+        opts.update(kwargs)
+        tkinter.Menu.add_radiobutton(self, **opts)
+
+    def add_header(self, text: str):
+        """Add a non-clickable section header with bold text.
+
+        The header is rendered as a disabled command item using a bold
+        variant of the menu font.
+        """
+        if isinstance(self._font, CTkFont):
+            bold_font = CTkFont(
+                family=self._font.cget("family"),
+                size=self._font.cget("size"),
+                weight="bold",
+            )
+        elif isinstance(self._font, tuple):
+            # tuple font: (family, size, ?weight...)
+            bold_font = (self._font[0], self._font[1], "bold")
+        else:
+            bold_font = self._font
+
+        self._items.append({
+            "type": "header",
+            "label": text,
+        })
+        self.add_command(label=text, state="disabled", font=bold_font)
+
+    def set_item_state(self, index_or_label: Union[int, str], state: str):
+        """Enable or disable a menu item by index or label text.
+
+        Args:
+            index_or_label: Either a 0-based index into the logical item
+                list (``self._items``) or the label string of the item.
+            state: 'normal' or 'disabled'.
+
+        Raises:
+            IndexError: If a numeric index is out of range.
+            ValueError: If a label string is not found.
+        """
+        if isinstance(index_or_label, int):
+            if index_or_label < 0 or index_or_label >= len(self._items):
+                raise IndexError(
+                    f"Item index {index_or_label} out of range "
+                    f"(0..{len(self._items) - 1})"
+                )
+            item = self._items[index_or_label]
+            item_index = index_or_label
+        else:
+            # Search by label text
+            item_index = None
+            for i, item in enumerate(self._items):
+                if item.get("label") == index_or_label:
+                    item_index = i
+                    break
+            if item_index is None:
+                raise ValueError(
+                    f"No item with label {index_or_label!r} found"
+                )
+            item = self._items[item_index]
+
+        if item["type"] == "separator":
+            return  # separators have no state
+
+        item["state"] = state
+        self.entryconfigure(item_index, state=state)
+
     def show(self, x: int, y: int):
         """Show the context menu at the given screen coordinates."""
         try:
@@ -164,9 +324,11 @@ class CTkContextMenu(tkinter.Menu, CTkAppearanceModeBaseClass, CTkScalingBaseCla
             pass
 
     def clear(self):
-        """Remove all items from the menu."""
+        """Remove all items from the menu and reset internal tracking."""
         self.delete(0, "end")
         self._items.clear()
+        self._check_variables.clear()
+        self._radio_variables.clear()
 
     def destroy(self):
         for widget in self._bound_widgets[:]:

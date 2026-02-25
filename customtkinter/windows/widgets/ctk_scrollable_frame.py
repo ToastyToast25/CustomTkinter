@@ -1,4 +1,4 @@
-from typing import Union, Tuple, Optional, Any
+from typing import Union, Tuple, Optional, Any, Callable
 try:
     from typing import Literal
 except ImportError:
@@ -94,7 +94,8 @@ class CTkScrollableFrame(tkinter.Frame, CTkAppearanceModeBaseClass, CTkScalingBa
                  label_text: str = "",
                  label_font: Optional[Union[tuple, CTkFont]] = None,
                  label_anchor: str = "center",
-                 orientation: Literal["vertical", "horizontal"] = "vertical"):
+                 orientation: Literal["vertical", "horizontal"] = "vertical",
+                 scroll_command: Optional[Callable] = None):
 
         self._orientation = orientation
 
@@ -111,11 +112,11 @@ class CTkScrollableFrame(tkinter.Frame, CTkAppearanceModeBaseClass, CTkScalingBa
         if self._orientation == "horizontal":
             self._scrollbar = CTkScrollbar(master=self._parent_frame, orientation="horizontal", command=self._parent_canvas.xview,
                                            fg_color=scrollbar_fg_color, button_color=scrollbar_button_color, button_hover_color=scrollbar_button_hover_color)
-            self._parent_canvas.configure(xscrollcommand=self._scrollbar.set)
+            self._parent_canvas.configure(xscrollcommand=self._scroll_command_wrapper)
         elif self._orientation == "vertical":
             self._scrollbar = CTkScrollbar(master=self._parent_frame, orientation="vertical", command=self._parent_canvas.yview,
                                            fg_color=scrollbar_fg_color, button_color=scrollbar_button_color, button_hover_color=scrollbar_button_hover_color)
-            self._parent_canvas.configure(yscrollcommand=self._scrollbar.set)
+            self._parent_canvas.configure(yscrollcommand=self._scroll_command_wrapper)
 
         self._label_text = label_text
         self._label = CTkLabel(self._parent_frame, text=label_text, anchor=label_anchor, font=label_font,
@@ -146,9 +147,26 @@ class CTkScrollableFrame(tkinter.Frame, CTkAppearanceModeBaseClass, CTkScalingBa
             tkinter.Frame.configure(self, bg=self._apply_appearance_mode(self._parent_frame.cget("fg_color")))
             self._parent_canvas.configure(bg=self._apply_appearance_mode(self._parent_frame.cget("fg_color")))
 
+        self._scroll_anim_id = None
+        self._on_scroll_callback = scroll_command
         self._shift_pressed = False
 
+    def _scroll_command_wrapper(self, *args):
+        """Wrapper for yscrollcommand/xscrollcommand that updates scrollbar and fires callback."""
+        self._scrollbar.set(*args)
+        if self._on_scroll_callback is not None:
+            try:
+                # args is (first_fraction, last_fraction) from the canvas
+                self._on_scroll_callback(float(args[0]))
+            except Exception:
+                pass
+
     def destroy(self):
+        # cancel any running scroll animation
+        if self._scroll_anim_id is not None:
+            self.after_cancel(self._scroll_anim_id)
+            self._scroll_anim_id = None
+
         # unregister instance
         try:
             self._instances.remove(self)
@@ -274,6 +292,9 @@ class CTkScrollableFrame(tkinter.Frame, CTkAppearanceModeBaseClass, CTkScalingBa
         if "label_anchor" in kwargs:
             self._label.configure(anchor=kwargs.pop("label_anchor"))
 
+        if "scroll_command" in kwargs:
+            self._on_scroll_callback = kwargs.pop("scroll_command")
+
         self._parent_frame.configure(**kwargs)
 
     def cget(self, attribute_name: str):
@@ -301,6 +322,8 @@ class CTkScrollableFrame(tkinter.Frame, CTkAppearanceModeBaseClass, CTkScalingBa
             return self._label.cget("anchor")
         elif attribute_name == "orientation":
             return self._orientation
+        elif attribute_name == "scroll_command":
+            return self._on_scroll_callback
 
         else:
             return self._parent_frame.cget(attribute_name)
@@ -358,23 +381,58 @@ class CTkScrollableFrame(tkinter.Frame, CTkAppearanceModeBaseClass, CTkScalingBa
         else:
             return False
 
-    def scroll_to_top(self):
+    def _animate_scroll(self, start_pos: float, end_pos: float, duration: int):
+        """Animate scroll from start_pos to end_pos fraction using ease-out-cubic."""
+        if self._scroll_anim_id is not None:
+            self.after_cancel(self._scroll_anim_id)
+            self._scroll_anim_id = None
+
+        elapsed = [0]
+        interval = 16  # ~60fps
+
+        def tick():
+            elapsed[0] += interval
+            t = min(1.0, elapsed[0] / duration)
+            t_eased = 1 - (1 - t) ** 3  # ease-out-cubic
+            pos = start_pos + (end_pos - start_pos) * t_eased
+            if self._orientation == "vertical":
+                self._parent_canvas.yview_moveto(pos)
+            else:
+                self._parent_canvas.xview_moveto(pos)
+            if t < 1.0:
+                self._scroll_anim_id = self.after(interval, tick)
+            else:
+                self._scroll_anim_id = None
+                if self._on_scroll_callback:
+                    self._on_scroll_callback(pos)
+
+        tick()
+
+    def scroll_to_top(self, animate: bool = False, duration: int = 300):
         """Scroll to the top (vertical) or left (horizontal)."""
         self._parent_canvas.update_idletasks()
-        if self._orientation == "vertical":
-            self._parent_canvas.yview_moveto(0.0)
+        if animate:
+            start = self.get_scroll_position()
+            self._animate_scroll(start, 0.0, duration)
         else:
-            self._parent_canvas.xview_moveto(0.0)
+            if self._orientation == "vertical":
+                self._parent_canvas.yview_moveto(0.0)
+            else:
+                self._parent_canvas.xview_moveto(0.0)
 
-    def scroll_to_bottom(self):
+    def scroll_to_bottom(self, animate: bool = False, duration: int = 300):
         """Scroll to the bottom (vertical) or right (horizontal)."""
         self._parent_canvas.update_idletasks()
-        if self._orientation == "vertical":
-            self._parent_canvas.yview_moveto(1.0)
+        if animate:
+            start = self.get_scroll_position()
+            self._animate_scroll(start, 1.0, duration)
         else:
-            self._parent_canvas.xview_moveto(1.0)
+            if self._orientation == "vertical":
+                self._parent_canvas.yview_moveto(1.0)
+            else:
+                self._parent_canvas.xview_moveto(1.0)
 
-    def scroll_to_widget(self, widget):
+    def scroll_to_widget(self, widget, animate: bool = False, duration: int = 300):
         """Scroll so that the given child widget is visible."""
         self._parent_canvas.update_idletasks()
 
@@ -396,8 +454,7 @@ class CTkScrollableFrame(tkinter.Frame, CTkAppearanceModeBaseClass, CTkScalingBa
                 return
             # calculate fraction to center the widget
             target = max(0, widget_y - (canvas_height - widget_h) // 2)
-            fraction = target / total_height
-            self._parent_canvas.yview_moveto(max(0.0, min(1.0, fraction)))
+            fraction = max(0.0, min(1.0, target / total_height))
         else:
             total_width = bbox[2] - bbox[0]
             if total_width <= 0:
@@ -409,8 +466,16 @@ class CTkScrollableFrame(tkinter.Frame, CTkAppearanceModeBaseClass, CTkScalingBa
             except Exception:
                 return
             target = max(0, widget_x - (canvas_width - widget_w) // 2)
-            fraction = target / total_width
-            self._parent_canvas.xview_moveto(max(0.0, min(1.0, fraction)))
+            fraction = max(0.0, min(1.0, target / total_width))
+
+        if animate:
+            start = self.get_scroll_position()
+            self._animate_scroll(start, fraction, duration)
+        else:
+            if self._orientation == "vertical":
+                self._parent_canvas.yview_moveto(fraction)
+            else:
+                self._parent_canvas.xview_moveto(fraction)
 
     def get_scroll_position(self) -> float:
         """Get current scroll position as a fraction (0.0 to 1.0)."""
@@ -419,14 +484,45 @@ class CTkScrollableFrame(tkinter.Frame, CTkAppearanceModeBaseClass, CTkScalingBa
         else:
             return self._parent_canvas.xview()[0]
 
-    def set_scroll_position(self, fraction: float):
+    def set_scroll_position(self, fraction: float, animate: bool = False, duration: int = 300):
         """Set scroll position as a fraction (0.0 to 1.0)."""
         fraction = max(0.0, min(1.0, fraction))
         self._parent_canvas.update_idletasks()
-        if self._orientation == "vertical":
-            self._parent_canvas.yview_moveto(fraction)
+        if animate:
+            start = self.get_scroll_position()
+            self._animate_scroll(start, fraction, duration)
         else:
-            self._parent_canvas.xview_moveto(fraction)
+            if self._orientation == "vertical":
+                self._parent_canvas.yview_moveto(fraction)
+            else:
+                self._parent_canvas.xview_moveto(fraction)
+
+    def scroll_by(self, amount: float, animate: bool = False, duration: int = 300):
+        """Scroll by a relative fraction amount (positive = down/right, negative = up/left)."""
+        self._parent_canvas.update_idletasks()
+        current = self.get_scroll_position()
+        target = max(0.0, min(1.0, current + amount))
+        if animate:
+            self._animate_scroll(current, target, duration)
+        else:
+            if self._orientation == "vertical":
+                self._parent_canvas.yview_moveto(target)
+            else:
+                self._parent_canvas.xview_moveto(target)
+
+    def is_at_top(self) -> bool:
+        """Return True if scrolled to the very top (vertical) or left (horizontal)."""
+        if self._orientation == "vertical":
+            return self._parent_canvas.yview()[0] <= 0.0
+        else:
+            return self._parent_canvas.xview()[0] <= 0.0
+
+    def is_at_bottom(self) -> bool:
+        """Return True if scrolled to the very bottom (vertical) or right (horizontal)."""
+        if self._orientation == "vertical":
+            return self._parent_canvas.yview()[1] >= 1.0
+        else:
+            return self._parent_canvas.xview()[1] >= 1.0
 
     def pack(self, **kwargs):
         self._parent_frame.pack(**kwargs)

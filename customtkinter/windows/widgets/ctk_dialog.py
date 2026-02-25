@@ -6,6 +6,15 @@ from .font import CTkFont
 from .ctk_button import CTkButton
 from .ctk_label import CTkLabel
 from .ctk_frame import CTkFrame
+from .appearance_mode import AppearanceModeTracker
+
+
+def _resolve_color(color):
+    """Resolve a (light, dark) color tuple to a single value based on appearance mode."""
+    if isinstance(color, (list, tuple)):
+        mode = AppearanceModeTracker.appearance_mode
+        return color[mode] if mode < len(color) else color[0]
+    return color
 
 
 class CTkDialog:
@@ -31,6 +40,9 @@ class CTkDialog:
         "question": ("\u003F", ("#3B8ED0", "#3B8ED0")),
     }
 
+    # Stores suppression state for "don't show again" checkboxes, keyed by user-provided string.
+    _suppressed: dict[str, bool] = {}
+
     def __init__(self,
                  parent: Any,
                  title: str = "Dialog",
@@ -41,13 +53,26 @@ class CTkDialog:
                  default_button: Optional[str] = None,
                  icon: Optional[str] = None,
                  width: int = 400,
-                 height: Optional[int] = None):
+                 height: Optional[int] = None,
+                 show_again_key: str = "",
+                 _input_mode: bool = False,
+                 _placeholder: str = "",
+                 _default_value: str = ""):
 
         self._parent = parent
         self._result = None
         self._style = style
         self._buttons = buttons or ["OK"]
         self._default_button = default_button or self._buttons[-1]
+        self._show_again_key = show_again_key
+        self._input_mode = _input_mode
+        self._input_value: Optional[str] = None
+
+        # If this key is suppressed, skip building the dialog entirely.
+        if show_again_key and self._suppressed.get(show_again_key, False):
+            self._result = self._default_button
+            self._window = None
+            return
 
         style_config = self._STYLE_CONFIG.get(style, self._STYLE_CONFIG["info"])
         self._icon_text = icon or style_config[0]
@@ -59,12 +84,11 @@ class CTkDialog:
         self._window.resizable(False, False)
         self._window.transient(parent)
 
+        # Start invisible for fade-in
+        self._window.attributes("-alpha", 0.0)
+
         # styling
-        bg = ThemeManager.theme["CTk"]["fg_color"]
-        if isinstance(bg, (list, tuple)):
-            from .appearance_mode import AppearanceModeTracker
-            mode = AppearanceModeTracker.appearance_mode
-            bg = bg[mode] if mode < len(bg) else bg[0]
+        bg = _resolve_color(ThemeManager.theme["CTk"]["fg_color"])
         self._window.configure(bg=bg)
 
         # icon + message area
@@ -72,17 +96,8 @@ class CTkDialog:
         content_frame.pack(fill="both", expand=True, padx=24, pady=(20, 12))
 
         # accent icon
-        text_color = ThemeManager.theme["CTkLabel"]["text_color"]
-        if isinstance(text_color, (list, tuple)):
-            from .appearance_mode import AppearanceModeTracker
-            mode = AppearanceModeTracker.appearance_mode
-            text_color = text_color[mode] if mode < len(text_color) else text_color[0]
-
-        accent = self._accent_color
-        if isinstance(accent, (list, tuple)):
-            from .appearance_mode import AppearanceModeTracker
-            mode = AppearanceModeTracker.appearance_mode
-            accent = accent[mode] if mode < len(accent) else accent[0]
+        text_color = _resolve_color(ThemeManager.theme["CTkLabel"]["text_color"])
+        accent = _resolve_color(self._accent_color)
 
         icon_label = tkinter.Label(content_frame, text=self._icon_text,
                                    font=("Segoe UI", 28), fg=accent, bg=bg)
@@ -98,14 +113,47 @@ class CTkDialog:
         msg_label.pack(fill="x", anchor="w")
 
         if detail:
+            detail_color = _resolve_color(("#888888", "#999999"))
             detail_label = tkinter.Label(text_frame, text=detail,
-                                         font=("Segoe UI", 11), fg="#888888", bg=bg,
+                                         font=("Segoe UI", 11), fg=detail_color, bg=bg,
                                          wraplength=width - 100, justify="left", anchor="w")
             detail_label.pack(fill="x", anchor="w", pady=(6, 0))
 
+        # Input field (for ask_input mode)
+        if _input_mode:
+            from .ctk_entry import CTkEntry
+            self._entry = CTkEntry(
+                self._window,
+                width=width - 48,
+                height=32,
+                placeholder_text=_placeholder,
+            )
+            self._entry.pack(padx=24, pady=(0, 8))
+            if _default_value:
+                self._entry.insert(0, _default_value)
+
         # separator line
-        sep = tkinter.Frame(self._window, bg="#404040", height=1)
+        sep_color = _resolve_color(("#d4d4d4", "#404040"))
+        sep = tkinter.Frame(self._window, bg=sep_color, height=1)
         sep.pack(fill="x", padx=16, pady=(4, 0))
+
+        # "Don't show again" checkbox
+        self._dont_show_var: Optional[tkinter.BooleanVar] = None
+        if show_again_key:
+            from .ctk_checkbox import CTkCheckBox
+            self._dont_show_var = tkinter.BooleanVar(value=False)
+            checkbox_frame = tkinter.Frame(self._window, bg=bg)
+            checkbox_frame.pack(fill="x", padx=16, pady=(8, 0))
+            self._dont_show_cb = CTkCheckBox(
+                checkbox_frame,
+                text="Don't show this again",
+                variable=self._dont_show_var,
+                height=24,
+                checkbox_width=18,
+                checkbox_height=18,
+                corner_radius=4,
+            )
+            self._dont_show_cb.pack(side="left")
 
         # button area
         btn_frame = tkinter.Frame(self._window, bg=bg)
@@ -149,7 +197,45 @@ class CTkDialog:
         self._window.focus_force()
         self._window.protocol("WM_DELETE_WINDOW", lambda: self._on_button(None))
 
+        # Focus the entry if in input mode
+        if _input_mode:
+            self._entry.focus()
+
+        # Fade-in animation: 0 -> 1 over 150ms
+        self._fade_in(0.0, 150)
+
+    def _fade_in(self, current_alpha: float, remaining_ms: int):
+        """Animate the window opacity from current_alpha to 1.0 over remaining_ms."""
+        step_ms = 15  # roughly 60fps
+        if self._window is None:
+            return
+        try:
+            if remaining_ms <= 0:
+                self._window.attributes("-alpha", 1.0)
+                return
+            new_alpha = min(1.0, current_alpha + (step_ms / 150))
+            self._window.attributes("-alpha", new_alpha)
+            self._window.after(step_ms, self._fade_in, new_alpha, remaining_ms - step_ms)
+        except Exception:
+            # Window may have been destroyed during animation
+            pass
+
     def _on_button(self, value):
+        # Capture input value before destroying the window
+        if self._input_mode and hasattr(self, "_entry"):
+            try:
+                self._input_value = self._entry.get()
+            except Exception:
+                self._input_value = None
+
+        # Record suppression preference
+        if self._show_again_key and self._dont_show_var is not None:
+            try:
+                if self._dont_show_var.get():
+                    CTkDialog._suppressed[self._show_again_key] = True
+            except Exception:
+                pass
+
         self._result = value
         try:
             self._window.grab_release()
@@ -159,6 +245,9 @@ class CTkDialog:
 
     def get_result(self):
         """Block until dialog closes, return the button text clicked (or None)."""
+        if self._window is None:
+            # Dialog was suppressed; return the pre-set result immediately.
+            return self._result
         self._window.wait_window()
         return self._result
 
@@ -215,3 +304,20 @@ class CTkDialog:
         d = cls(parent, title=title, message=message, detail=detail,
                 style="error", buttons=["Cancel", "Retry"], default_button="Retry")
         return d.get_result() == "Retry"
+
+    @classmethod
+    def ask_input(cls, parent, title: str = "Input", message: str = "",
+                  detail: str = "", placeholder: str = "",
+                  default_value: str = "") -> Optional[str]:
+        """Show an input dialog with a text entry field.
+
+        Returns the entered text if OK was clicked, None if cancelled.
+        """
+        d = cls(parent, title=title, message=message, detail=detail,
+                style="question", buttons=["Cancel", "OK"], default_button="OK",
+                _input_mode=True, _placeholder=placeholder,
+                _default_value=default_value)
+        result = d.get_result()
+        if result == "OK":
+            return d._input_value
+        return None

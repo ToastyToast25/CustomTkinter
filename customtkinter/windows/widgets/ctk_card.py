@@ -15,11 +15,22 @@ class CTkCard(CTkFrame):
     Extends CTkFrame with hover animation, click handling, and
     optional header/footer sections.
 
+    Supports disabled state (suppresses interaction, muted border),
+    selected state (persistent distinct border), click feedback
+    (brief flash), and keyboard focus ring (Tab/Enter/Space).
+
     Usage:
         card = CTkCard(parent, border_width=2, hover_effect=True)
         ctk.CTkLabel(card, text="Title").pack(padx=16, pady=(16, 4))
         ctk.CTkLabel(card, text="Content here").pack(padx=16, pady=(4, 16))
     """
+
+    # Default focus ring colors (light, dark)
+    _DEFAULT_FOCUS_COLOR = ("#1f6feb", "#58a6ff")
+    # Default disabled border colors (light, dark) -- muted appearance
+    _DEFAULT_DISABLED_BORDER_COLOR = ("#c0c0c0", "#2a2a2a")
+    # Default click flash color (light, dark)
+    _DEFAULT_CLICK_FLASH_COLOR = ("#ffffff", "#ffffff")
 
     def __init__(self,
                  master: Any,
@@ -32,10 +43,16 @@ class CTkCard(CTkFrame):
                  fg_color: Optional[Union[str, Tuple[str, str]]] = None,
                  border_color: Optional[Union[str, Tuple[str, str]]] = None,
                  hover_border_color: Optional[Union[str, Tuple[str, str]]] = None,
+                 selected_border_color: Optional[Union[str, Tuple[str, str]]] = None,
+                 disabled_border_color: Optional[Union[str, Tuple[str, str]]] = None,
+                 focus_border_color: Optional[Union[str, Tuple[str, str]]] = None,
+                 click_flash_color: Optional[Union[str, Tuple[str, str]]] = None,
 
                  hover_effect: bool = True,
                  hover_duration: int = 200,
                  command: Optional[Callable] = None,
+                 state: str = "normal",
+                 selected: bool = False,
                  **kwargs):
 
         # default border color
@@ -53,10 +70,26 @@ class CTkCard(CTkFrame):
         self._hover_duration = max(50, hover_duration)
         self._command = command
 
+        # selected state
+        self._selected = selected
+        self._selected_border_color = selected_border_color or self._hover_border_color
+
+        # disabled state
+        self._state = state
+        self._disabled_border_color = disabled_border_color or self._DEFAULT_DISABLED_BORDER_COLOR
+
+        # focus ring
+        self._focus_border_color = focus_border_color or self._DEFAULT_FOCUS_COLOR
+        self._focused = False
+
+        # click flash
+        self._click_flash_color = click_flash_color or self._DEFAULT_CLICK_FLASH_COLOR
+
         # animation state
         self._hover_phase = 0.0  # 0.0 = base, 1.0 = full hover
         self._hover_direction = 0  # 1 = hovering in, -1 = hovering out
         self._hover_after_id = None
+        self._click_after_id = None
 
         # bindings
         if self._hover_effect or self._command:
@@ -67,19 +100,114 @@ class CTkCard(CTkFrame):
             if hasattr(self, '_cursor_manipulation_enabled') and self._cursor_manipulation_enabled:
                 self.configure(cursor="hand2")
 
+        # keyboard focus support — bypass CTkFrame.configure which rejects takefocus
+        tkinter.Frame.configure(self, takefocus=True)
+        self.bind("<FocusIn>", self._on_focus_in, add="+")
+        self.bind("<FocusOut>", self._on_focus_out, add="+")
+        self.bind("<Return>", self._on_key_activate, add="+")
+        self.bind("<space>", self._on_key_activate, add="+")
+
+        # Apply initial visual state if selected or disabled at construction time
+        if self._state == "disabled" or self._selected:
+            self.after(10, self._apply_static_border)
+
+    # ------------------------------------------------------------------
+    #  Effective "rest" border: accounts for disabled > selected > base
+    # ------------------------------------------------------------------
+
+    def _effective_rest_border_color(self) -> str:
+        """Return the resolved hex color for the current rest state.
+
+        Priority: disabled > selected > base.
+        """
+        if self._state == "disabled":
+            return self._color_to_hex(
+                self._apply_appearance_mode(self._disabled_border_color))
+        if self._selected:
+            return self._color_to_hex(
+                self._apply_appearance_mode(self._selected_border_color))
+        return self._color_to_hex(
+            self._apply_appearance_mode(self._base_border_color))
+
+    def _apply_static_border(self):
+        """Set border to the current effective rest color without animation."""
+        color = self._effective_rest_border_color()
+        try:
+            self._canvas.itemconfig("border_parts", fill=color, outline=color)
+        except Exception:
+            pass
+
+    # ------------------------------------------------------------------
+    #  Hover
+    # ------------------------------------------------------------------
+
     def _on_enter(self, event=None):
+        if self._state == "disabled":
+            return
         if self._hover_effect:
             self._hover_direction = 1
             self._animate_hover()
 
     def _on_leave(self, event=None):
+        if self._state == "disabled":
+            return
         if self._hover_effect:
             self._hover_direction = -1
             self._animate_hover()
 
+    # ------------------------------------------------------------------
+    #  Click
+    # ------------------------------------------------------------------
+
     def _on_click(self, event=None):
+        if self._state == "disabled":
+            return
+        self._do_click_flash()
         if self._command is not None:
             self._command()
+
+    def _on_key_activate(self, event=None):
+        """Handle Return / Space when the card has keyboard focus."""
+        if self._state == "disabled":
+            return
+        self._do_click_flash()
+        if self._command is not None:
+            self._command()
+
+    def _do_click_flash(self):
+        """Flash the border to the click color, then ease back over 100ms."""
+        # Cancel any pending click-flash recovery
+        if self._click_after_id is not None:
+            self.after_cancel(self._click_after_id)
+            self._click_after_id = None
+
+        flash = self._color_to_hex(
+            self._apply_appearance_mode(self._click_flash_color))
+        try:
+            self._canvas.itemconfig("border_parts", fill=flash, outline=flash)
+        except Exception:
+            return
+
+        # After 100ms, restore to the correct visual state
+        self._click_after_id = self.after(100, self._click_flash_recover)
+
+    def _click_flash_recover(self):
+        """Restore border after a click flash."""
+        self._click_after_id = None
+
+        # If hover is active, let the hover animation recalculate
+        if self._hover_phase > 0.0:
+            self._animate_hover_frame()
+        else:
+            self._apply_static_border()
+
+        # If focused, overlay the focus ring
+        if self._focused:
+            self._apply_focus_ring()
+
+    # ------------------------------------------------------------------
+    #  Hover animation
+    # ------------------------------------------------------------------
 
     def _animate_hover(self):
         """Animate border color transition."""
@@ -93,9 +221,19 @@ class CTkCard(CTkFrame):
         self._hover_phase += step * self._hover_direction
         self._hover_phase = max(0.0, min(1.0, self._hover_phase))
 
-        # interpolate border color
-        base = self._color_to_hex(self._apply_appearance_mode(self._base_border_color))
-        target = self._color_to_hex(self._apply_appearance_mode(self._hover_border_color))
+        self._animate_hover_frame()
+
+        # continue animation if not at target
+        if (self._hover_direction > 0 and self._hover_phase < 1.0) or \
+           (self._hover_direction < 0 and self._hover_phase > 0.0):
+            self._hover_after_id = self.after(interval, self._animate_hover)
+
+    def _animate_hover_frame(self):
+        """Apply a single frame of the hover animation at the current phase."""
+        # The "base" for interpolation is the effective rest color
+        base = self._effective_rest_border_color()
+        target = self._color_to_hex(
+            self._apply_appearance_mode(self._hover_border_color))
         current = self._lerp_hex(base, target, self._ease_out_cubic(self._hover_phase))
 
         try:
@@ -103,10 +241,97 @@ class CTkCard(CTkFrame):
         except Exception:
             return
 
-        # continue animation if not at target
-        if (self._hover_direction > 0 and self._hover_phase < 1.0) or \
-           (self._hover_direction < 0 and self._hover_phase > 0.0):
-            self._hover_after_id = self.after(interval, self._animate_hover)
+    # ------------------------------------------------------------------
+    #  Focus ring
+    # ------------------------------------------------------------------
+
+    def _on_focus_in(self, event=None):
+        self._focused = True
+        if self._state == "disabled":
+            return
+        self._apply_focus_ring()
+
+    def _on_focus_out(self, event=None):
+        self._focused = False
+        if self._state == "disabled":
+            return
+        self._revert_focus_ring()
+
+    def _apply_focus_ring(self):
+        """Show the focus ring by setting border to the focus color."""
+        color = self._color_to_hex(
+            self._apply_appearance_mode(self._focus_border_color))
+        try:
+            self._canvas.itemconfig("border_parts", fill=color, outline=color)
+        except Exception:
+            pass
+
+    def _revert_focus_ring(self):
+        """Revert border after focus is lost."""
+        if self._hover_phase > 0.0:
+            # Mid-hover: let the animation paint the correct interpolated frame
+            self._animate_hover_frame()
+        else:
+            self._apply_static_border()
+
+    # ------------------------------------------------------------------
+    #  Disabled state
+    # ------------------------------------------------------------------
+
+    def enable(self):
+        """Enable the card, restoring hover animation and click events."""
+        if self._state == "normal":
+            return
+        self._state = "normal"
+        self._apply_static_border()
+
+    def disable(self):
+        """Disable the card, suppressing hover/click and showing a muted border."""
+        if self._state == "disabled":
+            return
+        self._state = "disabled"
+        # Reset hover
+        self._hover_phase = 0.0
+        self._hover_direction = 0
+        if self._hover_after_id is not None:
+            self.after_cancel(self._hover_after_id)
+            self._hover_after_id = None
+        if self._click_after_id is not None:
+            self.after_cancel(self._click_after_id)
+            self._click_after_id = None
+        self._apply_static_border()
+
+    # ------------------------------------------------------------------
+    #  Selected state
+    # ------------------------------------------------------------------
+
+    def select(self):
+        """Mark the card as selected, showing the selected border color."""
+        if self._selected:
+            return
+        self._selected = True
+        # Only update visuals when not disabled (disabled border takes priority)
+        if self._state != "disabled" and self._hover_phase == 0.0 and not self._focused:
+            self._apply_static_border()
+
+    def deselect(self):
+        """Remove the selected state, reverting to the base border color."""
+        if not self._selected:
+            return
+        self._selected = False
+        if self._state != "disabled" and self._hover_phase == 0.0 and not self._focused:
+            self._apply_static_border()
+
+    def toggle_select(self):
+        """Toggle the selected state."""
+        if self._selected:
+            self.deselect()
+        else:
+            self.select()
+
+    # ------------------------------------------------------------------
+    #  Utility (unchanged)
+    # ------------------------------------------------------------------
 
     def _color_to_hex(self, color: str) -> str:
         """Convert any tkinter color to #RRGGBB."""
@@ -130,11 +355,22 @@ class CTkCard(CTkFrame):
         """Cubic ease-out for smooth deceleration."""
         return 1 - (1 - t) ** 3
 
+    # ------------------------------------------------------------------
+    #  Lifecycle
+    # ------------------------------------------------------------------
+
     def destroy(self):
         if self._hover_after_id is not None:
             self.after_cancel(self._hover_after_id)
             self._hover_after_id = None
+        if self._click_after_id is not None:
+            self.after_cancel(self._click_after_id)
+            self._click_after_id = None
         super().destroy()
+
+    # ------------------------------------------------------------------
+    #  configure / cget
+    # ------------------------------------------------------------------
 
     def configure(self, **kwargs):
         if "hover_border_color" in kwargs:
@@ -145,6 +381,26 @@ class CTkCard(CTkFrame):
             self._command = kwargs.pop("command")
         if "border_color" in kwargs:
             self._base_border_color = kwargs["border_color"]
+        if "selected_border_color" in kwargs:
+            self._selected_border_color = kwargs.pop("selected_border_color")
+        if "disabled_border_color" in kwargs:
+            self._disabled_border_color = kwargs.pop("disabled_border_color")
+        if "focus_border_color" in kwargs:
+            self._focus_border_color = kwargs.pop("focus_border_color")
+        if "click_flash_color" in kwargs:
+            self._click_flash_color = kwargs.pop("click_flash_color")
+        if "state" in kwargs:
+            new_state = kwargs.pop("state")
+            if new_state == "disabled":
+                self.disable()
+            else:
+                self.enable()
+        if "selected" in kwargs:
+            sel = kwargs.pop("selected")
+            if sel:
+                self.select()
+            else:
+                self.deselect()
         super().configure(**kwargs)
 
     def cget(self, attribute_name: str):
@@ -156,5 +412,17 @@ class CTkCard(CTkFrame):
             return self._hover_duration
         elif attribute_name == "command":
             return self._command
+        elif attribute_name == "state":
+            return self._state
+        elif attribute_name == "selected":
+            return self._selected
+        elif attribute_name == "selected_border_color":
+            return self._selected_border_color
+        elif attribute_name == "disabled_border_color":
+            return self._disabled_border_color
+        elif attribute_name == "focus_border_color":
+            return self._focus_border_color
+        elif attribute_name == "click_flash_color":
+            return self._click_flash_color
         else:
             return super().cget(attribute_name)
