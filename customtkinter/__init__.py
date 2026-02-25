@@ -37,6 +37,15 @@ from .windows.widgets import CTkTextbox
 from .windows.widgets import CTkScrollableFrame
 from .windows.widgets import CTkToast
 from .windows.widgets import CTkSkeleton
+from .windows.widgets import CTkToolTip
+from .windows.widgets import CTkCollapsibleFrame
+from .windows.widgets import CTkContextMenu
+from .windows.widgets import CTkDialog
+from .windows.widgets import CTkStatusBadge
+from .windows.widgets import CTkCard
+from .windows.widgets import CTkRichTextbox
+from .windows.widgets import CTkCircularProgress
+from .windows.widgets import CTkSearchEntry
 
 # import windows
 from .windows import CTk
