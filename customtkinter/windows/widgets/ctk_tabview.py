@@ -143,6 +143,10 @@ class CTkTabview(CTkBaseClass):
                                height=self._apply_widget_scaling(self._desired_height - self._outer_spacing - self._outer_button_overhang))
         self._draw()
 
+    def _set_appearance_mode(self, mode_string):
+        super()._set_appearance_mode(mode_string)
+        self._configure_segmented_button_background_corners()
+
     def _configure_segmented_button_background_corners(self):
         """ needs to be called for changes in fg_color, bg_color """
 

@@ -9,6 +9,7 @@ from packaging import version
 from .widgets.theme import ThemeManager
 from .widgets.scaling import CTkScalingBaseClass
 from .widgets.appearance_mode import CTkAppearanceModeBaseClass
+from .widgets.appearance_mode import AppearanceModeTracker
 
 from customtkinter.windows.widgets.utility.utility_functions import pop_from_dict_by_set, check_kwargs_empty
 
@@ -87,6 +88,7 @@ class CTk(CTK_PARENT_CLASS, CTkAppearanceModeBaseClass, CTkScalingBaseClass):
 
     def destroy(self):
         self._disable_macos_dark_title_bar()
+        AppearanceModeTracker.remove_app(self)
 
         # call destroy methods of super classes
         tkinter.Tk.destroy(self)

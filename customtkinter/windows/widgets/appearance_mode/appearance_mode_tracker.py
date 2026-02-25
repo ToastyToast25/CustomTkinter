@@ -3,6 +3,14 @@ from typing import Callable
 import darkdetect
 
 
+def _is_tk_alive(widget) -> bool:
+    """Check if a tkinter widget still exists and has a valid Tcl interpreter."""
+    try:
+        return widget.winfo_exists()
+    except Exception:
+        return False
+
+
 class AppearanceModeTracker:
 
     callback_list = []
@@ -39,6 +47,13 @@ class AppearanceModeTracker:
     def remove(cls, callback: Callable):
         try:
             cls.callback_list.remove(callback)
+        except ValueError:
+            return
+
+    @classmethod
+    def remove_app(cls, app):
+        try:
+            cls.app_list.remove(app)
         except ValueError:
             return
 
@@ -86,7 +101,8 @@ class AppearanceModeTracker:
                 cls.appearance_mode = new_appearance_mode
                 cls.update_callbacks()
 
-        # find an existing tkinter.Tk object for the next call of .after()
+        # prune destroyed windows and find a live one for the next .after() call
+        cls.app_list = [app for app in cls.app_list if _is_tk_alive(app)]
         for app in cls.app_list:
             try:
                 app.after(cls.update_loop_interval, cls.update)
