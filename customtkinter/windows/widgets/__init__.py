@@ -33,3 +33,9 @@ from .ctk_date_picker import CTkDatePicker
 from .ctk_color_picker import CTkColorPicker
 from .ctk_chip import CTkChip
 from .ctk_navigation_rail import CTkNavigationRail
+from .ctk_data_table import CTkDataTable
+from .ctk_time_picker import CTkTimePicker
+from .ctk_tree_view import CTkTreeView
+from .ctk_number_entry import CTkNumberEntry
+from .ctk_toggle_switch import CTkToggleSwitch
+from .ctk_range_slider import CTkRangeSlider

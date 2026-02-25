@@ -54,6 +54,12 @@ from .windows.widgets import CTkColorPicker
 from .windows.widgets import CTkChip
 from .windows.widgets import CTkNavigationRail
 from .windows.widgets import CTkLoadingOverlay
+from .windows.widgets import CTkDataTable
+from .windows.widgets import CTkTimePicker
+from .windows.widgets import CTkTreeView
+from .windows.widgets import CTkNumberEntry
+from .windows.widgets import CTkToggleSwitch
+from .windows.widgets import CTkRangeSlider
 
 # import windows
 from .windows import CTk
