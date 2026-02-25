@@ -70,6 +70,9 @@ class CTkTextbox(CTkBaseClass):
         if isinstance(self._font, CTkFont):
             self._font.add_size_configure_callback(self._update_font)
 
+        # tag fonts: maps tag_name -> original font (before scaling)
+        self._tag_fonts: dict = {}
+
         self._canvas = CTkCanvas(master=self,
                                  highlightthickness=0,
                                  width=self._apply_widget_scaling(self._desired_width),
@@ -180,6 +183,8 @@ class CTkTextbox(CTkBaseClass):
         super()._set_scaling(*args, **kwargs)
 
         self._textbox.configure(font=self._apply_font_scaling(self._font))
+        for tag_name, tag_font in self._tag_fonts.items():
+            self._textbox.tag_config(tag_name, font=self._apply_font_scaling(tag_font))
         self._canvas.configure(width=self._apply_widget_scaling(self._desired_width),
                                height=self._apply_widget_scaling(self._desired_height))
         self._create_grid_for_text_and_scrollbars(re_grid_textbox=True, re_grid_x_scrollbar=True, re_grid_y_scrollbar=True)
@@ -450,8 +455,16 @@ class CTkTextbox(CTkBaseClass):
 
     def tag_config(self, tagName, **kwargs):
         if "font" in kwargs:
-            raise AttributeError("'font' option forbidden, because would be incompatible with scaling")
+            font = kwargs.pop("font")
+            if font is not None:
+                self._tag_fonts[tagName] = font
+                kwargs["font"] = self._apply_font_scaling(font)
+            else:
+                self._tag_fonts.pop(tagName, None)
+                kwargs["font"] = None
         return self._textbox.tag_config(tagName, **kwargs)
+
+    tag_configure = tag_config
 
     def tag_delete(self, *tagName):
         return self._textbox.tag_delete(*tagName)
