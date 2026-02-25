@@ -168,7 +168,8 @@ class CTkTreeView(CTkBaseClass):
             button_color=scrollbar_button_color,
             button_hover_color=scrollbar_button_hover_color,
         )
-        self._scrollbar.place(
+        tkinter.Frame.place(
+            self._scrollbar,
             relx=1.0,
             x=-self._apply_widget_scaling(border_offset + 14),
             y=self._apply_widget_scaling(border_offset),
@@ -1100,7 +1101,8 @@ class CTkTreeView(CTkBaseClass):
             height=-self._apply_widget_scaling(border_offset * 2),
         )
 
-        self._scrollbar.place(
+        tkinter.Frame.place(
+            self._scrollbar,
             relx=1.0,
             x=-self._apply_widget_scaling(border_offset + 14),
             y=self._apply_widget_scaling(border_offset),

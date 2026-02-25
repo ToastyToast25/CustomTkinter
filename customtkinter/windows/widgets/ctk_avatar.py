@@ -193,6 +193,7 @@ class CTkAvatar(CTkBaseClass):
 
     def _start_pulse(self):
         """Start a gentle scale pulse on the status dot."""
+        self._stop_pulse()
         self._pulse_t = 0.0
         self._pulse_direction = 1
         self._pulse_tick()
@@ -291,13 +292,25 @@ class CTkAvatar(CTkBaseClass):
             self._initials = self._extract_initials(self._text)
             require_redraw = True
         if "status" in kwargs:
-            self._status = kwargs.pop("status")
+            new_status = kwargs.pop("status")
+            old_status = self._status
+            self._status = new_status
             require_redraw = True
+            if new_status == "online" and old_status != "online":
+                self._start_pulse()
+            elif new_status != "online" and old_status == "online":
+                self._stop_pulse()
         if "fg_color" in kwargs:
             self._fg_color_val = kwargs.pop("fg_color")
             require_redraw = True
         if "text_color" in kwargs:
             self._text_color = kwargs.pop("text_color")
+            require_redraw = True
+        if "border_color" in kwargs:
+            self._border_color_val = kwargs.pop("border_color")
+            require_redraw = True
+        if "border_width" in kwargs:
+            self._border_width_val = kwargs.pop("border_width")
             require_redraw = True
         if "size" in kwargs:
             new_size = kwargs.pop("size")
@@ -327,5 +340,9 @@ class CTkAvatar(CTkBaseClass):
             return self._fg_color_val
         elif attribute_name == "text_color":
             return self._text_color
+        elif attribute_name == "border_color":
+            return self._border_color_val
+        elif attribute_name == "border_width":
+            return self._border_width_val
         else:
             return super().cget(attribute_name)

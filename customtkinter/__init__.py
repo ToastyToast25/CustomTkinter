@@ -64,6 +64,7 @@ from .windows.widgets import CTkRating
 from .windows.widgets import CTkAvatar
 from .windows.widgets import CTkStepper
 from .windows.widgets import CTkAccordion
+from .windows.widgets import CTkDevTools, CTkConfigError, CTkConfigWarning
 
 # import windows
 from .windows import CTk

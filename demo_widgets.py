@@ -34,6 +34,15 @@ class WidgetDemo(ctk.CTk):
         self._build_rich_textbox_section()
         self._build_context_menu_section()
         self._build_dialog_section()
+        self._build_toggle_switch_section()
+        self._build_breadcrumb_section()
+        self._build_chip_section()
+        self._build_number_entry_section()
+        self._build_range_slider_section()
+        self._build_data_table_section()
+        self._build_tree_view_section()
+        self._build_notification_banner_section()
+        self._build_date_time_section()
 
     # --- helpers ---
     def _section_label(self, text):
@@ -137,6 +146,9 @@ class WidgetDemo(ctk.CTk):
     # ================================================================
     def _build_accordion_section(self):
         self._section_label("CTkAccordion")
+
+        ctk.CTkLabel(self._main, text="Tab to focus headers, arrow keys to navigate between sections",
+                      font=ctk.CTkFont(size=11), text_color=("gray50", "gray60")).pack(anchor="w")
 
         accordion = ctk.CTkAccordion(self._main, exclusive=True)
         accordion.pack(fill="x", pady=4)
@@ -514,6 +526,269 @@ class WidgetDemo(ctk.CTk):
 
         result_lbl = ctk.CTkLabel(row, text="")
         result_lbl.pack(side="left", padx=12)
+
+    # ================================================================
+    # 10. CTkToggleSwitch
+    # ================================================================
+    def _build_toggle_switch_section(self):
+        self._section_label("CTkToggleSwitch")
+        row = ctk.CTkFrame(self._main, fg_color="transparent")
+        row.pack(fill="x")
+
+        state_lbl = ctk.CTkLabel(row, text="Off")
+        state_lbl.pack(side="right", padx=8)
+
+        def on_toggle(val):
+            state_lbl.configure(text="On" if val else "Off")
+
+        sw1 = ctk.CTkToggleSwitch(row, text="Enable feature", size="medium",
+                                    command=on_toggle)
+        sw1.pack(side="left", padx=8)
+
+        ctk.CTkLabel(row, text="Sizes:").pack(side="left", padx=(16, 4))
+        for sz in ("small", "medium", "large"):
+            ctk.CTkToggleSwitch(row, size=sz).pack(side="left", padx=4)
+
+        ctk.CTkLabel(row, text="Labels:").pack(side="left", padx=(16, 4))
+        ctk.CTkToggleSwitch(row, size="large", on_label="ON", off_label="OFF",
+                             on_color=("#22C55E", "#16A34A")).pack(side="left", padx=4)
+
+    # ================================================================
+    # 11. CTkBreadcrumb
+    # ================================================================
+    def _build_breadcrumb_section(self):
+        self._section_label("CTkBreadcrumb")
+
+        bc = ctk.CTkBreadcrumb(self._main,
+                                items=["Home", "Products", "Electronics", "Phones"],
+                                command=lambda idx, text: bc_lbl.configure(
+                                    text=f"Clicked: {text} (index {idx})"))
+        bc.pack(fill="x", pady=4)
+
+        row = ctk.CTkFrame(self._main, fg_color="transparent")
+        row.pack(fill="x", pady=4)
+
+        bc_lbl = ctk.CTkLabel(row, text="Click a segment above")
+        bc_lbl.pack(side="right", padx=8)
+
+        def push_item():
+            bc.push("Accessories")
+        def pop_item():
+            try:
+                bc.pop()
+            except IndexError:
+                pass
+
+        ctk.CTkButton(row, text="Push", width=60, command=push_item).pack(side="left", padx=4)
+        ctk.CTkButton(row, text="Pop", width=60, command=pop_item).pack(side="left", padx=4)
+
+    # ================================================================
+    # 12. CTkChip
+    # ================================================================
+    def _build_chip_section(self):
+        self._section_label("CTkChip")
+        row = ctk.CTkFrame(self._main, fg_color="transparent")
+        row.pack(fill="x")
+
+        for style in ("default", "primary", "success", "warning", "error"):
+            ctk.CTkChip(row, text=style.capitalize(), style=style).pack(side="left", padx=4)
+
+        row2 = ctk.CTkFrame(self._main, fg_color="transparent")
+        row2.pack(fill="x", pady=(6, 0))
+
+        ctk.CTkLabel(row2, text="Closeable:").pack(side="left", padx=(0, 4))
+        chip_frame = ctk.CTkFrame(row2, fg_color="transparent")
+        chip_frame.pack(side="left")
+        for tag in ("Python", "JavaScript", "Rust"):
+            c = ctk.CTkChip(chip_frame, text=tag, style="primary", closeable=True)
+            c.configure(close_command=lambda ch=c: ch.destroy())
+            c.pack(side="left", padx=2)
+
+        ctk.CTkLabel(row2, text="Selectable:").pack(side="left", padx=(16, 4))
+        sel_chip = ctk.CTkChip(row2, text="Toggle me", style="success")
+        sel_chip.pack(side="left", padx=4)
+        sel_chip.bind("<Button-1>", lambda e: sel_chip.toggle(), add="+")
+
+    # ================================================================
+    # 13. CTkNumberEntry
+    # ================================================================
+    def _build_number_entry_section(self):
+        self._section_label("CTkNumberEntry")
+        row = ctk.CTkFrame(self._main, fg_color="transparent")
+        row.pack(fill="x")
+
+        ctk.CTkLabel(row, text="Integer:").pack(side="left", padx=(0, 4))
+        ne1 = ctk.CTkNumberEntry(row, from_=0, to=100, step=1, width=120)
+        ne1.pack(side="left", padx=4)
+        ne1.set(42)
+
+        ctk.CTkLabel(row, text="Float:").pack(side="left", padx=(16, 4))
+        ne2 = ctk.CTkNumberEntry(row, from_=0.0, to=10.0, step=0.1,
+                                  number_type=float, width=120)
+        ne2.pack(side="left", padx=4)
+        ne2.set(3.14)
+
+        ctk.CTkLabel(row, text="With prefix:").pack(side="left", padx=(16, 4))
+        ne3 = ctk.CTkNumberEntry(row, from_=0, to=9999, step=10,
+                                  prefix="$", width=140)
+        ne3.pack(side="left", padx=4)
+        ne3.set(250)
+
+    # ================================================================
+    # 14. CTkRangeSlider
+    # ================================================================
+    def _build_range_slider_section(self):
+        self._section_label("CTkRangeSlider")
+        row = ctk.CTkFrame(self._main, fg_color="transparent")
+        row.pack(fill="x")
+
+        range_lbl = ctk.CTkLabel(row, text="Range: 25 - 75")
+        range_lbl.pack(side="right", padx=8)
+
+        def on_range(low, high):
+            range_lbl.configure(text=f"Range: {int(low)} - {int(high)}")
+
+        rs = ctk.CTkRangeSlider(row, from_=0, to=100, command=on_range,
+                                 show_value=True, value_format="{:.0f}")
+        rs.pack(side="left", fill="x", expand=True, padx=8)
+        rs.set(25, 75)
+
+    # ================================================================
+    # 15. CTkDataTable (with filter + keyboard navigation)
+    # ================================================================
+    def _build_data_table_section(self):
+        self._section_label("CTkDataTable")
+
+        # Filter bar
+        filter_row = ctk.CTkFrame(self._main, fg_color="transparent")
+        filter_row.pack(fill="x", pady=(4, 2))
+        ctk.CTkLabel(filter_row, text="Filter:").pack(side="left", padx=(0, 4))
+
+        table = ctk.CTkDataTable(self._main, width=700, height=220)
+
+        filter_entry = ctk.CTkEntry(filter_row, placeholder_text="Type to filter rows...", width=250)
+        filter_entry.pack(side="left", padx=4)
+
+        match_lbl = ctk.CTkLabel(filter_row, text="")
+        match_lbl.pack(side="left", padx=8)
+
+        def on_filter(event=None):
+            text = filter_entry.get()
+            table.filter(text)
+            n = len(table._display_data)
+            total = len(table._data)
+            if text:
+                match_lbl.configure(text=f"{n}/{total} rows")
+            else:
+                match_lbl.configure(text="")
+
+        filter_entry.bind("<KeyRelease>", on_filter)
+
+        def clear_filter():
+            filter_entry.delete(0, "end")
+            table.clear_filter()
+            match_lbl.configure(text="")
+
+        ctk.CTkButton(filter_row, text="Clear", width=60, command=clear_filter).pack(side="left", padx=4)
+        ctk.CTkLabel(filter_row, text="(Arrow keys navigate, Enter selects)",
+                      font=ctk.CTkFont(size=11), text_color=("gray50", "gray60")).pack(side="right", padx=8)
+
+        table.pack(fill="x", pady=4)
+
+        table.set_columns([
+            {"key": "name", "title": "Name", "width": 160},
+            {"key": "role", "title": "Role", "width": 140},
+            {"key": "status", "title": "Status", "width": 100, "type": "badge"},
+            {"key": "score", "title": "Score", "width": 80, "type": "number"},
+        ])
+        table.set_data([
+            {"name": "Alice Johnson", "role": "Engineer", "status": "Active", "score": 95},
+            {"name": "Bob Smith", "role": "Designer", "status": "Active", "score": 88},
+            {"name": "Carol White", "role": "Manager", "status": "Pending", "score": 92},
+            {"name": "Dave Brown", "role": "Engineer", "status": "Inactive", "score": 76},
+            {"name": "Eve Davis", "role": "QA Lead", "status": "Active", "score": 89},
+            {"name": "Frank Lee", "role": "DevOps", "status": "Active", "score": 91},
+            {"name": "Grace Kim", "role": "Analyst", "status": "Active", "score": 84},
+            {"name": "Hank Wilson", "role": "Engineer", "status": "Pending", "score": 78},
+        ])
+
+    # ================================================================
+    # 16. CTkTreeView
+    # ================================================================
+    def _build_tree_view_section(self):
+        self._section_label("CTkTreeView")
+
+        tree = ctk.CTkTreeView(self._main, width=500, height=200)
+        tree.pack(fill="x", pady=4)
+
+        root1 = tree.insert("", "Project Files")
+        src = tree.insert(root1, "src")
+        tree.insert(src, "main.py")
+        tree.insert(src, "utils.py")
+        tree.insert(src, "config.py")
+        tests = tree.insert(root1, "tests")
+        tree.insert(tests, "test_main.py")
+        tree.insert(tests, "test_utils.py")
+
+        root2 = tree.insert("", "Documentation")
+        tree.insert(root2, "README.md")
+        tree.insert(root2, "CHANGELOG.md")
+
+        tree.expand(root1)
+        tree.expand(src)
+
+    # ================================================================
+    # 17. CTkNotificationBanner
+    # ================================================================
+    def _build_notification_banner_section(self):
+        self._section_label("CTkNotificationBanner")
+        row = ctk.CTkFrame(self._main, fg_color="transparent")
+        row.pack(fill="x")
+
+        banner_container = ctk.CTkFrame(self._main, fg_color="transparent", height=50)
+        banner_container.pack(fill="x", pady=4)
+        banner_container.pack_propagate(False)
+
+        def show_banner(style):
+            for child in banner_container.winfo_children():
+                child.destroy()
+            messages = {
+                "info": "A new version is available.",
+                "success": "Settings saved successfully!",
+                "warning": "Your session will expire in 5 minutes.",
+                "error": "Failed to connect to server.",
+            }
+            b = ctk.CTkNotificationBanner(
+                banner_container,
+                message=messages.get(style, "Notification"),
+                style=style,
+                dismissible=True,
+            )
+            b.show()
+
+        for style in ("info", "success", "warning", "error"):
+            ctk.CTkButton(row, text=style.capitalize(), width=80,
+                           command=lambda s=style: show_banner(s)).pack(side="left", padx=3)
+
+    # ================================================================
+    # 18. CTkDatePicker & CTkTimePicker
+    # ================================================================
+    def _build_date_time_section(self):
+        self._section_label("CTkDatePicker & CTkTimePicker")
+        row = ctk.CTkFrame(self._main, fg_color="transparent")
+        row.pack(fill="x")
+
+        ctk.CTkLabel(row, text="Date:").pack(side="left", padx=(0, 4))
+        dp = ctk.CTkDatePicker(row, width=180)
+        dp.pack(side="left", padx=4)
+
+        ctk.CTkLabel(row, text="Time (24h):").pack(side="left", padx=(16, 4))
+        tp = ctk.CTkTimePicker(row, width=160, time_format="24h")
+        tp.pack(side="left", padx=4)
+
+        ctk.CTkLabel(row, text="Time (12h):").pack(side="left", padx=(16, 4))
+        tp2 = ctk.CTkTimePicker(row, width=160, time_format="12h")
+        tp2.pack(side="left", padx=4)
 
 
 if __name__ == "__main__":

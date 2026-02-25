@@ -511,7 +511,7 @@ class CTkBreadcrumb(CTkBaseClass):
 
         super().configure(require_redraw=require_redraw, **kwargs)
 
-    def cget(self, attribute_name: str) -> any:
+    def cget(self, attribute_name: str) -> Any:
         if attribute_name == "corner_radius":
             return self._corner_radius
         elif attribute_name == "fg_color":

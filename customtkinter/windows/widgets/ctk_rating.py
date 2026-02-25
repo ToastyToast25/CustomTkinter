@@ -132,39 +132,15 @@ class CTkRating(CTkBaseClass):
             # empty
             self._canvas.create_polygon(points, fill=empty_c, outline=empty_c, tags=tag)
         else:
-            # half star: draw empty background, then clip left half
+            # half star: empty background, then filled left-half overlay
             self._canvas.create_polygon(points, fill=empty_c, outline=empty_c, tags=tag)
-            # draw filled left half using a rectangle clip
-            left_x = cx - r
-            self._canvas.create_rectangle(
-                left_x, cy - r - 1, cx, cy + r + 1,
-                fill=fill_c, outline=fill_c, tags=(tag, f"star_clip_{index}"),
-                stipple=""
-            )
-            # redraw filled star but clipped via overlaying
-            clip_points = self._star_polygon(cx, cy, r)
-            self._canvas.create_polygon(clip_points, fill=fill_c, outline=fill_c, tags=(tag, f"star_fill_{index}"))
-            # mask right half with empty color
-            self._canvas.create_rectangle(
-                cx, cy - r - 1, cx + r + 1, cy + r + 1,
-                fill="", outline="", tags=(tag, f"star_mask_bg_{index}")
-            )
-            # draw the right-half star as empty
-            self._canvas.create_polygon(clip_points, fill="", outline="", tags=(tag, f"star_outline_{index}"))
-            # Simpler approach: just draw two polygons
-            self._canvas.delete(tag)
-            # Empty background star
-            self._canvas.create_polygon(points, fill=empty_c, outline=empty_c, tags=tag)
-            # Filled overlay with clip region
             half_points = []
             for i in range(0, len(points), 2):
                 px, py = points[i], points[i + 1]
                 if px <= cx:
                     half_points.extend([px, py])
                 else:
-                    # clip to center line
                     half_points.extend([cx, py])
-
             if len(half_points) >= 6:
                 self._canvas.create_polygon(half_points, fill=fill_c, outline=fill_c, tags=tag)
 
@@ -328,6 +304,12 @@ class CTkRating(CTkBaseClass):
         if "allow_half" in kwargs:
             self._allow_half = kwargs.pop("allow_half")
             require_redraw = True
+        if "star_size" in kwargs:
+            self._star_size = kwargs.pop("star_size")
+            require_redraw = True
+        if "spacing" in kwargs:
+            self._spacing = kwargs.pop("spacing")
+            require_redraw = True
         if "state" in kwargs:
             self._state = kwargs.pop("state")
             if self._state == "normal":
@@ -365,6 +347,10 @@ class CTkRating(CTkBaseClass):
             return self._allow_half
         elif attribute_name == "state":
             return self._state
+        elif attribute_name == "star_size":
+            return self._star_size
+        elif attribute_name == "spacing":
+            return self._spacing
         elif attribute_name == "command":
             return self._command
         else:

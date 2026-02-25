@@ -1,4 +1,5 @@
 import copy
+import tkinter
 from typing import Union, Tuple, List, Dict, Callable, Optional, Any
 
 from .core_rendering import CTkCanvas
@@ -107,6 +108,18 @@ class CTkNavigationRail(CTkBaseClass):
         # store expanded width for toggling compact mode
         self._expanded_width: int = width
 
+        # keyboard focus state
+        self._focus_index: int = -1  # index into _all_navigable_items()
+        self._has_focus: bool = False
+
+        # tooltip for compact mode
+        self._tooltip: Optional[CTkToolTip] = None
+        self._tooltip_name: Optional[str] = None
+
+        # animation state
+        self._anim_after_id = None
+        self._anim_target_width: Optional[int] = None
+
         # canvas + draw engine for the rounded-rect background
         self._canvas = CTkCanvas(master=self,
                                  highlightthickness=0,
@@ -120,6 +133,17 @@ class CTkNavigationRail(CTkBaseClass):
         self._canvas.bind("<Motion>", self._on_motion)
         self._canvas.bind("<Leave>", self._on_leave)
         self._canvas.bind("<ButtonRelease-1>", self._on_click)
+
+        # keyboard bindings
+        self._canvas.configure(takefocus=1)
+        self._canvas.bind("<FocusIn>", self._on_focus_in)
+        self._canvas.bind("<FocusOut>", self._on_focus_out)
+        self._canvas.bind("<Up>", self._on_key_up)
+        self._canvas.bind("<Down>", self._on_key_down)
+        self._canvas.bind("<Return>", self._on_key_select)
+        self._canvas.bind("<space>", self._on_key_select)
+        self._canvas.bind("<Home>", self._on_key_home)
+        self._canvas.bind("<End>", self._on_key_end)
 
         # initial draw
         if self._compact:
@@ -145,6 +169,10 @@ class CTkNavigationRail(CTkBaseClass):
     # ------------------------------------------------------------------
 
     def destroy(self):
+        if self._anim_after_id is not None:
+            self.after_cancel(self._anim_after_id)
+            self._anim_after_id = None
+        self._hide_compact_tooltip()
         if isinstance(self._font, CTkFont):
             self._font.remove_size_configure_callback(self._update_font)
         if isinstance(self._icon_font, CTkFont):
@@ -323,6 +351,17 @@ class CTkNavigationRail(CTkBaseClass):
             else:
                 item_text_color = text_color_normal
 
+            # draw keyboard focus ring
+            if self._has_focus and self._focus_index >= 0:
+                nav_items = self._all_navigable_items()
+                if self._focus_index < len(nav_items) and nav_items[self._focus_index] == name:
+                    focus_color = self._apply_appearance_mode(("#1f6aa5", "#1f6aa5"))
+                    self._canvas.create_rectangle(
+                        item_pad + 1, y_offset + 2,
+                        total_width - item_pad - 1, y_offset + item_h - 2,
+                        outline=focus_color, width=2,
+                        tags="nav_item")
+
             # draw icon and text
             if is_compact:
                 # icon centered, no text
@@ -403,6 +442,17 @@ class CTkNavigationRail(CTkBaseClass):
                 return region["name"]
         return None
 
+    def _all_navigable_items(self) -> List[str]:
+        """Return flat list of all navigable item names (excluding separators)."""
+        names = []
+        for item in self._items:
+            if item.get("name") != "__separator__":
+                names.append(item["name"])
+        for item in self._bottom_items:
+            if item.get("name") != "__separator__":
+                names.append(item["name"])
+        return names
+
     def _on_motion(self, event):
         if self._state == "disabled":
             return
@@ -410,11 +460,17 @@ class CTkNavigationRail(CTkBaseClass):
         if name != self._hover_item:
             self._hover_item = name
             self._draw()
+        # compact-mode tooltip
+        if self._compact and name:
+            self._show_compact_tooltip(name, event)
+        elif self._tooltip:
+            self._hide_compact_tooltip()
 
     def _on_leave(self, event=None):
         if self._hover_item is not None:
             self._hover_item = None
             self._draw()
+        self._hide_compact_tooltip()
 
     def _on_click(self, event):
         if self._state == "disabled":
@@ -424,6 +480,98 @@ class CTkNavigationRail(CTkBaseClass):
             self.set_active(name)
             if self._command is not None:
                 self._command(name)
+
+    # -- Keyboard navigation -----------------------------------------------
+
+    def _on_focus_in(self, event=None):
+        self._has_focus = True
+        if self._focus_index < 0:
+            # auto-focus the active item or the first item
+            nav = self._all_navigable_items()
+            if self._current_value in nav:
+                self._focus_index = nav.index(self._current_value)
+            elif nav:
+                self._focus_index = 0
+        self._draw()
+
+    def _on_focus_out(self, event=None):
+        self._has_focus = False
+        self._draw()
+
+    def _on_key_up(self, event=None):
+        if self._state == "disabled":
+            return
+        nav = self._all_navigable_items()
+        if not nav:
+            return
+        self._focus_index = max(0, self._focus_index - 1)
+        self._draw()
+
+    def _on_key_down(self, event=None):
+        if self._state == "disabled":
+            return
+        nav = self._all_navigable_items()
+        if not nav:
+            return
+        self._focus_index = min(len(nav) - 1, self._focus_index + 1)
+        self._draw()
+
+    def _on_key_home(self, event=None):
+        if self._state == "disabled":
+            return
+        nav = self._all_navigable_items()
+        if nav:
+            self._focus_index = 0
+            self._draw()
+
+    def _on_key_end(self, event=None):
+        if self._state == "disabled":
+            return
+        nav = self._all_navigable_items()
+        if nav:
+            self._focus_index = len(nav) - 1
+            self._draw()
+
+    def _on_key_select(self, event=None):
+        if self._state == "disabled":
+            return
+        nav = self._all_navigable_items()
+        if 0 <= self._focus_index < len(nav):
+            name = nav[self._focus_index]
+            self.set_active(name)
+            if self._command is not None:
+                self._command(name)
+
+    # -- Compact-mode tooltips ---------------------------------------------
+
+    def _show_compact_tooltip(self, name: str, event):
+        """Show a tooltip with the item's text label in compact mode."""
+        if self._tooltip_name == name and self._tooltip is not None:
+            return  # already showing for this item
+        self._hide_compact_tooltip()
+        self._tooltip_name = name
+        # find display text for this item
+        text = name
+        for item in self._items + self._bottom_items:
+            if item.get("name") == name:
+                text = item.get("text", name)
+                break
+        # create a lightweight tooltip Toplevel
+        try:
+            tw = tkinter.Toplevel(self)
+            tw.wm_overrideredirect(True)
+            tw.wm_attributes("-topmost", True)
+            x = self.winfo_rootx() + self.winfo_width() + 4
+            y = self.winfo_rooty() + event.y - 12
+            tw.wm_geometry(f"+{x}+{y}")
+            label = tkinter.Label(tw, text=text, justify="left",
+                                  bg="#2D2D2D", fg="#FFFFFF",
+                                  font=("Segoe UI", 11),
+                                  padx=8, pady=4)
+            label.pack()
+            self._tooltip = tw
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Public API
@@ -458,14 +606,57 @@ class CTkNavigationRail(CTkBaseClass):
         self._badges.pop(name, None)
         self._draw()
 
+    def _hide_compact_tooltip(self):
+        """Destroy the current compact-mode tooltip Toplevel."""
+        if self._tooltip is not None:
+            try:
+                self._tooltip.destroy()
+            except tkinter.TclError:
+                pass
+            self._tooltip = None
+        self._tooltip_name = None
+
+    # -- Smooth compact/expand animation -----------------------------------
+
     def set_compact(self, compact: bool):
-        """Toggle between compact (icon-only) and expanded (icon + text) mode."""
+        """Toggle between compact (icon-only) and expanded (icon + text) mode with smooth animation."""
         if compact != self._compact:
             self._compact = compact
-            if self._compact:
-                self._set_dimensions(width=self._compact_width)
-            else:
-                self._set_dimensions(width=self._expanded_width)
+            self._hide_compact_tooltip()
+            target = self._compact_width if self._compact else self._expanded_width
+            self._animate_width(target)
+
+    def _animate_width(self, target_width: int, duration_ms: int = 200):
+        """Smoothly animate the rail width to the target."""
+        if self._anim_after_id is not None:
+            self.after_cancel(self._anim_after_id)
+            self._anim_after_id = None
+
+        start_width = self._current_width
+        total_steps = max(1, duration_ms // 16)
+        self._anim_target_width = target_width
+        self._run_width_anim(0, start_width, target_width, total_steps)
+
+    def _run_width_anim(self, step: int, start_w: int, end_w: int, total_steps: int):
+        """Execute one frame of the width animation."""
+        if step > total_steps:
+            self._set_dimensions(width=end_w)
+            self._anim_after_id = None
+            return
+
+        t = step / total_steps if total_steps > 0 else 1.0
+        # ease-out cubic
+        t2 = t - 1.0
+        eased = t2 * t2 * t2 + 1.0
+        current_w = int(start_w + (end_w - start_w) * eased)
+
+        try:
+            self._set_dimensions(width=current_w)
+        except Exception:
+            self._anim_after_id = None
+            return
+
+        self._anim_after_id = self.after(16, self._run_width_anim, step + 1, start_w, end_w, total_steps)
 
     def get(self) -> str:
         """Alias for get_active — return the name of the currently selected item."""

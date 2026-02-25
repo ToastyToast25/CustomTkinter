@@ -295,7 +295,6 @@ class CTkToggleSwitch(CTkBaseClass):
         self._canvas.delete("all")
 
         # draw track (rounded rectangle / pill)
-        self._canvas.create_round_rect = None  # not built in, use arcs
         self._draw_pill(0, 0, tw, th, cr, fill=track_c, outline=track_c)
 
         # border
@@ -365,26 +364,9 @@ class CTkToggleSwitch(CTkBaseClass):
             self._text_label.configure(bg=bg)
 
     def _draw_pill(self, x1, y1, x2, y2, r, **kw):
-        """Draw a pill / rounded rectangle on the canvas."""
-        # Use a polygon approximation of a rounded rect
-        points = []
-        steps = 12
-        # top-left arc
-        for i in range(steps + 1):
-            angle = math.pi / 2 + (math.pi / 2) * (i / steps)
-            points.append(x1 + r + r * math.cos(angle))
-            points.append(y1 + r + r * math.sin(angle))
-        # top-right arc
-        for i in range(steps + 1):
-            angle = 0 + (math.pi / 2) * (i / steps)
-            points.append(x2 - r + r * math.cos(angle))
-            points.append(y1 + r - r * math.sin(math.pi / 2 - angle * 1))
-        # recalculate top-right properly
-        points_clean = []
-        # Simpler approach: use create_oval for the two ends + rectangle for middle
+        """Draw a pill / rounded rectangle on the canvas using two ovals + center rect."""
         self._canvas.create_oval(x1, y1, x1 + 2 * r, y2, **kw)
         self._canvas.create_oval(x2 - 2 * r, y1, x2, y2, **kw)
-        # fill center
         fill_kw = {k: v for k, v in kw.items() if k != "width"}
         if "outline" not in fill_kw:
             fill_kw["outline"] = fill_kw.get("fill", "")

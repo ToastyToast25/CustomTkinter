@@ -83,6 +83,8 @@ class CTkStepper(CTkBaseClass):
         self._pulse_dir = 1
         # animated line fill progress
         self._line_anim_after_id = None
+        self._line_anim_step = 0
+        self._line_anim_index = 0
 
         self._draw()
         self._start_active_pulse()
@@ -377,6 +379,18 @@ class CTkStepper(CTkBaseClass):
         if "upcoming_color" in kwargs:
             self._upcoming_color = kwargs.pop("upcoming_color")
             require_redraw = True
+        if "text_color" in kwargs:
+            self._text_color = kwargs.pop("text_color")
+            require_redraw = True
+        if "completed_text_color" in kwargs:
+            self._completed_text_color = kwargs.pop("completed_text_color")
+            require_redraw = True
+        if "line_color" in kwargs:
+            self._line_color = kwargs.pop("line_color")
+            require_redraw = True
+        if "completed_line_color" in kwargs:
+            self._completed_line_color = kwargs.pop("completed_line_color")
+            require_redraw = True
         if "command" in kwargs:
             self._command = kwargs.pop("command")
         if require_redraw:
@@ -394,6 +408,14 @@ class CTkStepper(CTkBaseClass):
             return self._active_color
         elif attribute_name == "upcoming_color":
             return self._upcoming_color
+        elif attribute_name == "text_color":
+            return self._text_color
+        elif attribute_name == "completed_text_color":
+            return self._completed_text_color
+        elif attribute_name == "line_color":
+            return self._line_color
+        elif attribute_name == "completed_line_color":
+            return self._completed_line_color
         elif attribute_name == "command":
             return self._command
         else:

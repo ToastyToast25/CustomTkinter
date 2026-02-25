@@ -249,8 +249,8 @@ class CTkSplitView(CTkBaseClass):
 
         p2_w = available - p1_w
 
-        # place panel 1
-        self._panel_1.place(
+        # place panel 1 (bypass CTkBaseClass.place which rejects width/height)
+        tkinter.Frame.place(self._panel_1,
             x=0, y=0,
             width=max(0, p1_w),
             height=total_h,
@@ -278,7 +278,7 @@ class CTkSplitView(CTkBaseClass):
             self._collapse_btn.place(relx=0.5, rely=0.15, anchor="center")
 
         # place panel 2
-        self._panel_2.place(
+        tkinter.Frame.place(self._panel_2,
             x=p1_w + divider_w, y=0,
             width=max(0, p2_w),
             height=total_h,
@@ -305,8 +305,8 @@ class CTkSplitView(CTkBaseClass):
 
         p2_h = available - p1_h
 
-        # place panel 1
-        self._panel_1.place(
+        # place panel 1 (bypass CTkBaseClass.place which rejects width/height)
+        tkinter.Frame.place(self._panel_1,
             x=0, y=0,
             width=total_w,
             height=max(0, p1_h),
@@ -334,7 +334,7 @@ class CTkSplitView(CTkBaseClass):
             self._collapse_btn.place(relx=0.15, rely=0.5, anchor="center")
 
         # place panel 2
-        self._panel_2.place(
+        tkinter.Frame.place(self._panel_2,
             x=0, y=p1_h + divider_h,
             width=total_w,
             height=max(0, p2_h),

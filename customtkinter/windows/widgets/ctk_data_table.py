@@ -137,6 +137,13 @@ class CTkDataTable(CTkBaseClass):
         self._selected_indices: List[int] = []  # indices into _data (original)
         self._hover_display_row: int = -1
 
+        # keyboard navigation
+        self._focus_display_row: int = -1
+        self._has_focus: bool = False
+
+        # filter state
+        self._filter_text: str = ""
+
         # column resize state
         self._resize_col_index: int = -1
         self._resize_start_x: int = 0
@@ -236,6 +243,18 @@ class CTkDataTable(CTkBaseClass):
         else:
             self._body_canvas.bind("<MouseWheel>", self._on_mousewheel)
 
+        # keyboard navigation
+        self._body_canvas.configure(takefocus=1)
+        self._body_canvas.bind("<FocusIn>", self._on_focus_in)
+        self._body_canvas.bind("<FocusOut>", self._on_focus_out)
+        self._body_canvas.bind("<Up>", self._on_key_up)
+        self._body_canvas.bind("<Down>", self._on_key_down)
+        self._body_canvas.bind("<Return>", self._on_key_select)
+        self._body_canvas.bind("<space>", self._on_key_select)
+        self._body_canvas.bind("<Home>", self._on_key_home)
+        self._body_canvas.bind("<End>", self._on_key_end)
+        self._body_canvas.bind("<Escape>", self._on_key_escape)
+
         # empty state id
         self._empty_text_id = None
 
@@ -303,8 +322,20 @@ class CTkDataTable(CTkBaseClass):
     # ------------------------------------------------------------------
 
     def _compute_display_data(self):
-        """Compute the display data from the raw data, applying sort and pagination."""
+        """Compute the display data from the raw data, applying filter, sort, and pagination."""
         indices = list(range(len(self._data)))
+
+        # filter
+        if self._filter_text:
+            query = self._filter_text.lower()
+            filtered = []
+            for idx in indices:
+                row = self._data[idx]
+                for val in row.values():
+                    if val is not None and query in str(val).lower():
+                        filtered.append(idx)
+                        break
+            indices = filtered
 
         # sort
         if self._sort_column is not None:
@@ -471,6 +502,14 @@ class CTkDataTable(CTkBaseClass):
                     self._draw_text_cell(x, y, col_w, row_h, str(cell_value),
                                          col_align, text_fg, display_row, scaled_font)
                 x += col_w
+
+            # keyboard focus indicator
+            if self._has_focus and display_row == self._focus_display_row:
+                focus_color = self._apply_appearance_mode(("#1f6aa5", "#5BA8F5"))
+                self._body_canvas.create_rectangle(
+                    1, y + 1, total_width - 1, y + row_h - 1,
+                    outline=focus_color, width=2,
+                    tags=("focus_ring", f"focus_r{display_row}"))
 
             # bottom border for row
             self._body_canvas.create_line(0, y + row_h - 1, total_width, y + row_h - 1,
@@ -967,6 +1006,110 @@ class CTkDataTable(CTkBaseClass):
         if 0 <= index < len(self._data):
             self._data[index].update(row_dict)
             self._redraw_table()
+
+    # ------------------------------------------------------------------
+    # Keyboard navigation
+    # ------------------------------------------------------------------
+
+    def _on_focus_in(self, event=None):
+        self._has_focus = True
+        if self._focus_display_row < 0 and self._display_data:
+            # auto-focus first selected or first row
+            if self._selected_indices:
+                try:
+                    self._focus_display_row = self._display_indices.index(self._selected_indices[0])
+                except ValueError:
+                    self._focus_display_row = 0
+            else:
+                self._focus_display_row = 0
+        self._redraw_table()
+
+    def _on_focus_out(self, event=None):
+        self._has_focus = False
+        self._redraw_table()
+
+    def _on_key_up(self, event=None):
+        if not self._display_data:
+            return
+        self._focus_display_row = max(0, self._focus_display_row - 1)
+        self._scroll_to_focus()
+        self._redraw_table()
+
+    def _on_key_down(self, event=None):
+        if not self._display_data:
+            return
+        self._focus_display_row = min(len(self._display_data) - 1, self._focus_display_row + 1)
+        self._scroll_to_focus()
+        self._redraw_table()
+
+    def _on_key_home(self, event=None):
+        if not self._display_data:
+            return
+        self._focus_display_row = 0
+        self._scroll_to_focus()
+        self._redraw_table()
+
+    def _on_key_end(self, event=None):
+        if not self._display_data:
+            return
+        self._focus_display_row = len(self._display_data) - 1
+        self._scroll_to_focus()
+        self._redraw_table()
+
+    def _on_key_select(self, event=None):
+        """Select the focused row on Enter/Space."""
+        if not self._display_data or self._focus_display_row < 0:
+            return
+        if self._select_mode == "none":
+            return
+        original_idx = self._display_indices[self._focus_display_row]
+        self._selected_indices = [original_idx]
+        self._redraw_table()
+        if self._command is not None:
+            self._command(self._selected_indices[:])
+
+    def _on_key_escape(self, event=None):
+        """Deselect all on Escape."""
+        self._selected_indices = []
+        self._redraw_table()
+
+    def _scroll_to_focus(self):
+        """Ensure the focused row is visible in the viewport."""
+        if self._focus_display_row < 0 or not self._display_data:
+            return
+        row_y = self._focus_display_row * self._ROW_HEIGHT
+        total_height = len(self._display_data) * self._ROW_HEIGHT
+        if total_height <= 0:
+            return
+        # get visible region
+        try:
+            visible_top = self._body_canvas.canvasy(0)
+            visible_bottom = self._body_canvas.canvasy(self._body_canvas.winfo_height())
+        except Exception:
+            return
+        if row_y < visible_top:
+            self._body_canvas.yview_moveto(row_y / total_height)
+        elif row_y + self._ROW_HEIGHT > visible_bottom:
+            target = (row_y + self._ROW_HEIGHT - self._body_canvas.winfo_height()) / total_height
+            self._body_canvas.yview_moveto(max(0, target))
+
+    # ------------------------------------------------------------------
+    # Filter API
+    # ------------------------------------------------------------------
+
+    def filter(self, text: str):
+        """Filter rows to those containing `text` in any column (case-insensitive)."""
+        self._filter_text = text
+        self._current_page = 0
+        self._focus_display_row = -1
+        self._redraw_table()
+
+    def clear_filter(self):
+        """Clear the current filter and show all rows."""
+        self._filter_text = ""
+        self._current_page = 0
+        self._focus_display_row = -1
+        self._redraw_table()
 
     # ------------------------------------------------------------------
     # configure / cget

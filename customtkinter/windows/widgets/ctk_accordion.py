@@ -57,6 +57,7 @@ class CTkAccordion(CTkFrame):
         self._header_hover_color = header_hover_color
 
         self._sections: List[dict] = []  # [{name, frame, collapsed}]
+        self._focused_index: int = -1  # keyboard focus tracker
 
     def add_section(self, title: str, collapsed: bool = True, lock: bool = False) -> CTkFrame:
         """
@@ -94,6 +95,13 @@ class CTkAccordion(CTkFrame):
         cf._command = None  # we'll handle it ourselves
         cf.configure(command=lambda is_collapsed, sec=section_info: self._on_section_toggle(sec, is_collapsed))
 
+        # keyboard navigation: arrow keys move between section headers
+        section_idx = len(self._sections) - 1
+        cf._header.bind("<Up>", lambda e, i=section_idx: self._focus_section(i - 1))
+        cf._header.bind("<Down>", lambda e, i=section_idx: self._focus_section(i + 1))
+        cf._header.bind("<Home>", lambda e: self._focus_section(0))
+        cf._header.bind("<End>", lambda e: self._focus_section(len(self._sections) - 1))
+
         # if not collapsed and exclusive, collapse all others
         if not collapsed and self._exclusive:
             for other in self._sections:
@@ -101,6 +109,18 @@ class CTkAccordion(CTkFrame):
                     other["frame"].collapse()
 
         return cf.content
+
+    def _focus_section(self, index: int):
+        """Move keyboard focus to the section at the given index."""
+        if not self._sections:
+            return
+        index = max(0, min(index, len(self._sections) - 1))
+        self._focused_index = index
+        header = self._sections[index]["frame"]._header
+        header.focus_set()
+        # scroll the section into view if inside a scrollable parent
+        header.update_idletasks()
+        self._sections[index]["frame"].update_idletasks()
 
     def _on_section_toggle(self, section: dict, is_collapsed: bool):
         """Handle section toggle, enforcing exclusive mode."""
@@ -164,6 +184,13 @@ class CTkAccordion(CTkFrame):
                 self._sections.pop(i)
                 break
 
+    def focus_section(self, name: str):
+        """Move keyboard focus to a section by name."""
+        for i, s in enumerate(self._sections):
+            if s["name"] == name:
+                self._focus_section(i)
+                break
+
     def get_open_section(self) -> Optional[str]:
         """Return the name of the currently open section, or None."""
         for s in self._sections:
@@ -184,6 +211,26 @@ class CTkAccordion(CTkFrame):
             self._animation_duration = kwargs.pop("animation_duration")
             for s in self._sections:
                 s["frame"].configure(animation_duration=self._animation_duration)
+        if "section_spacing" in kwargs:
+            self._section_spacing = kwargs.pop("section_spacing")
+            for s in self._sections:
+                s["frame"].pack_configure(pady=(0, self._section_spacing))
+        if "section_fg_color" in kwargs:
+            self._section_fg_color = kwargs.pop("section_fg_color")
+            for s in self._sections:
+                s["frame"].configure(fg_color=self._section_fg_color)
+        if "header_color" in kwargs:
+            self._header_color = kwargs.pop("header_color")
+            for s in self._sections:
+                s["frame"].configure(header_color=self._header_color)
+        if "header_hover_color" in kwargs:
+            self._header_hover_color = kwargs.pop("header_hover_color")
+            for s in self._sections:
+                s["frame"].configure(header_hover_color=self._header_hover_color)
+        if "font" in kwargs:
+            self._font = kwargs.pop("font")
+            for s in self._sections:
+                s["frame"].configure(font=self._font)
         if "command" in kwargs:
             self._command = kwargs.pop("command")
         super().configure(**kwargs)
@@ -195,6 +242,16 @@ class CTkAccordion(CTkFrame):
             return self._animate
         elif attribute_name == "animation_duration":
             return self._animation_duration
+        elif attribute_name == "section_spacing":
+            return self._section_spacing
+        elif attribute_name == "section_fg_color":
+            return self._section_fg_color
+        elif attribute_name == "header_color":
+            return self._header_color
+        elif attribute_name == "header_hover_color":
+            return self._header_hover_color
+        elif attribute_name == "font":
+            return self._font
         elif attribute_name == "command":
             return self._command
         else:
