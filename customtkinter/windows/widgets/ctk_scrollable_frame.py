@@ -17,6 +17,64 @@ from .theme import ThemeManager
 
 
 class CTkScrollableFrame(tkinter.Frame, CTkAppearanceModeBaseClass, CTkScalingBaseClass):
+    # class-level registry for mouse wheel isolation
+    _instances: list = []
+    _global_bindings_set: bool = False
+
+    @classmethod
+    def _ensure_global_bindings(cls, widget):
+        """Set up global mouse wheel binding once, shared by all instances."""
+        if not cls._global_bindings_set:
+            if "linux" in sys.platform:
+                widget.bind_all("<Button-4>", cls._dispatch_mouse_wheel, add=True)
+                widget.bind_all("<Button-5>", cls._dispatch_mouse_wheel, add=True)
+            else:
+                widget.bind_all("<MouseWheel>", cls._dispatch_mouse_wheel, add=True)
+            widget.bind_all("<KeyPress-Shift_L>", cls._dispatch_shift_press, add=True)
+            widget.bind_all("<KeyPress-Shift_R>", cls._dispatch_shift_press, add=True)
+            widget.bind_all("<KeyRelease-Shift_L>", cls._dispatch_shift_release, add=True)
+            widget.bind_all("<KeyRelease-Shift_R>", cls._dispatch_shift_release, add=True)
+            cls._global_bindings_set = True
+
+    @classmethod
+    def _remove_global_bindings(cls, widget):
+        """Remove global bindings when the last instance is destroyed."""
+        if cls._global_bindings_set and not cls._instances:
+            try:
+                if "linux" in sys.platform:
+                    widget.unbind_all("<Button-4>")
+                    widget.unbind_all("<Button-5>")
+                else:
+                    widget.unbind_all("<MouseWheel>")
+                widget.unbind_all("<KeyPress-Shift_L>")
+                widget.unbind_all("<KeyPress-Shift_R>")
+                widget.unbind_all("<KeyRelease-Shift_L>")
+                widget.unbind_all("<KeyRelease-Shift_R>")
+            except Exception:
+                pass
+            cls._global_bindings_set = False
+
+    @classmethod
+    def _dispatch_mouse_wheel(cls, event):
+        """Route mouse wheel event to the correct instance under the cursor."""
+        for instance in cls._instances:
+            try:
+                if instance.check_if_master_is_canvas(event.widget):
+                    instance._mouse_wheel_all(event)
+                    return
+            except Exception:
+                continue
+
+    @classmethod
+    def _dispatch_shift_press(cls, event):
+        for instance in cls._instances:
+            instance._shift_pressed = True
+
+    @classmethod
+    def _dispatch_shift_release(cls, event):
+        for instance in cls._instances:
+            instance._shift_pressed = False
+
     def __init__(self,
                  master: Any,
                  width: int = 200,
@@ -76,16 +134,9 @@ class CTkScrollableFrame(tkinter.Frame, CTkAppearanceModeBaseClass, CTkScalingBa
         self.bind("<Configure>", lambda e: self._parent_canvas.configure(scrollregion=self._parent_canvas.bbox("all")))
         self._parent_canvas.bind("<Configure>", self._fit_frame_dimensions_to_canvas)
 
-        if "linux" in sys.platform:
-            self.bind_all("<Button-4>", self._mouse_wheel_all, add=True)
-            self.bind_all("<Button-5>", self._mouse_wheel_all, add=True)
-        else:
-            self.bind_all("<MouseWheel>", self._mouse_wheel_all, add=True)
-
-        self.bind_all("<KeyPress-Shift_L>", self._keyboard_shift_press_all, add=True)
-        self.bind_all("<KeyPress-Shift_R>", self._keyboard_shift_press_all, add=True)
-        self.bind_all("<KeyRelease-Shift_L>", self._keyboard_shift_release_all, add=True)
-        self.bind_all("<KeyRelease-Shift_R>", self._keyboard_shift_release_all, add=True)
+        # register instance and set up shared global bindings
+        self._instances.append(self)
+        self._ensure_global_bindings(self)
         self._create_window_id = self._parent_canvas.create_window(0, 0, window=self, anchor="nw")
 
         if self._parent_frame.cget("fg_color") == "transparent":
@@ -98,16 +149,14 @@ class CTkScrollableFrame(tkinter.Frame, CTkAppearanceModeBaseClass, CTkScalingBa
         self._shift_pressed = False
 
     def destroy(self):
-        # unbind global event bindings to prevent "invalid command name" errors
-        if "linux" in sys.platform:
-            self.unbind_all("<Button-4>")
-            self.unbind_all("<Button-5>")
-        else:
-            self.unbind_all("<MouseWheel>")
-        self.unbind_all("<KeyPress-Shift_L>")
-        self.unbind_all("<KeyPress-Shift_R>")
-        self.unbind_all("<KeyRelease-Shift_L>")
-        self.unbind_all("<KeyRelease-Shift_R>")
+        # unregister instance
+        try:
+            self._instances.remove(self)
+        except ValueError:
+            pass
+
+        # remove global bindings if this was the last instance
+        self._remove_global_bindings(self)
 
         tkinter.Frame.destroy(self)
         self._parent_frame.destroy()
