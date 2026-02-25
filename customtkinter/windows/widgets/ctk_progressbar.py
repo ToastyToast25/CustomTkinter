@@ -76,6 +76,13 @@ class CTkProgressBar(CTkBaseClass):
         self._orientation = orientation
         self._mode = mode  # "determinate" or "indeterminate"
 
+        # pulse animation state
+        self._pulse_running: bool = False
+        self._pulse_after_id = None
+        self._pulse_color_2 = None
+        self._pulse_speed: int = 800  # full cycle in ms
+        self._pulse_phase: float = 0.0
+
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
 
@@ -113,6 +120,11 @@ class CTkProgressBar(CTkBaseClass):
             self.after_cancel(self._loop_after_id)
             self._loop_after_id = None
         self._loop_running = False
+
+        if self._pulse_after_id is not None:
+            self.after_cancel(self._pulse_after_id)
+            self._pulse_after_id = None
+        self._pulse_running = False
 
         if self._variable is not None:
             self._variable.trace_remove("write", self._variable_callback_name)
@@ -289,6 +301,68 @@ class CTkProgressBar(CTkBaseClass):
         else:
             self._indeterminate_value += self._indeterminate_speed
             self._draw()
+
+    @staticmethod
+    def _lerp_hex(color1: str, color2: str, t: float) -> str:
+        """ linearly interpolate between two hex colors, t in [0, 1] """
+        r1, g1, b1 = int(color1[1:3], 16), int(color1[3:5], 16), int(color1[5:7], 16)
+        r2, g2, b2 = int(color2[1:3], 16), int(color2[3:5], 16), int(color2[5:7], 16)
+        r = int(r1 + (r2 - r1) * t)
+        g = int(g1 + (g2 - g1) * t)
+        b = int(b1 + (b2 - b1) * t)
+        return f"#{r:02x}{g:02x}{b:02x}"
+
+    def reset(self):
+        """ reset progress bar: stop all animations and set value to 0 """
+        self.stop()
+        self.stop_pulse()
+        self._determinate_value = 0
+        self._indeterminate_value = 0
+        self._draw()
+
+    def start_pulse(self, pulse_color: Optional[str] = None, speed: int = 800):
+        """ start pulsing progress_color between current color and pulse_color.
+            speed: full cycle duration in milliseconds. """
+        base = self._apply_appearance_mode(self._progress_color)
+        if pulse_color is None:
+            # auto-generate a brighter version of progress_color
+            r, g, b = int(base[1:3], 16), int(base[3:5], 16), int(base[5:7], 16)
+            r = min(255, r + 40)
+            g = min(255, g + 40)
+            b = min(255, b + 40)
+            pulse_color = f"#{r:02x}{g:02x}{b:02x}"
+        self._pulse_color_2 = pulse_color
+        self._pulse_speed = max(100, speed)
+        self._pulse_phase = 0.0
+        if not self._pulse_running:
+            self._pulse_running = True
+            self._pulse_tick()
+
+    def stop_pulse(self):
+        """ stop pulse animation and restore original progress_color """
+        self._pulse_running = False
+        if self._pulse_after_id is not None:
+            self.after_cancel(self._pulse_after_id)
+            self._pulse_after_id = None
+        # restore original color
+        self._canvas.itemconfig("progress_parts",
+                                fill=self._apply_appearance_mode(self._progress_color),
+                                outline=self._apply_appearance_mode(self._progress_color))
+
+    def _pulse_tick(self):
+        if not self._pulse_running:
+            return
+        # sine easing: smooth 0->1->0 over one cycle
+        t = (math.sin(self._pulse_phase * math.pi * 2) + 1) / 2
+        base = self._apply_appearance_mode(self._progress_color)
+        color = self._lerp_hex(base, self._pulse_color_2, t)
+        self._canvas.itemconfig("progress_parts", fill=color, outline=color)
+        # advance phase
+        interval = 16  # ~60fps
+        self._pulse_phase += interval / self._pulse_speed
+        if self._pulse_phase >= 1.0:
+            self._pulse_phase -= 1.0
+        self._pulse_after_id = self.after(interval, self._pulse_tick)
 
     def bind(self, sequence: str = None, command: Callable = None, add: Union[str, bool] = True):
         """ called on the tkinter.Canvas """
