@@ -35,6 +35,7 @@ from .windows.widgets import CTkSwitch
 from .windows.widgets import CTkTabview
 from .windows.widgets import CTkTextbox
 from .windows.widgets import CTkScrollableFrame
+from .windows.widgets import CTkToast
 
 # import windows
 from .windows import CTk
