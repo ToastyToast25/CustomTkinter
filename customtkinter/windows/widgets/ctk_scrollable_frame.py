@@ -358,6 +358,76 @@ class CTkScrollableFrame(tkinter.Frame, CTkAppearanceModeBaseClass, CTkScalingBa
         else:
             return False
 
+    def scroll_to_top(self):
+        """Scroll to the top (vertical) or left (horizontal)."""
+        self._parent_canvas.update_idletasks()
+        if self._orientation == "vertical":
+            self._parent_canvas.yview_moveto(0.0)
+        else:
+            self._parent_canvas.xview_moveto(0.0)
+
+    def scroll_to_bottom(self):
+        """Scroll to the bottom (vertical) or right (horizontal)."""
+        self._parent_canvas.update_idletasks()
+        if self._orientation == "vertical":
+            self._parent_canvas.yview_moveto(1.0)
+        else:
+            self._parent_canvas.xview_moveto(1.0)
+
+    def scroll_to_widget(self, widget):
+        """Scroll so that the given child widget is visible."""
+        self._parent_canvas.update_idletasks()
+
+        # get canvas scroll region
+        bbox = self._parent_canvas.bbox("all")
+        if not bbox:
+            return
+
+        if self._orientation == "vertical":
+            total_height = bbox[3] - bbox[1]
+            if total_height <= 0:
+                return
+            canvas_height = self._parent_canvas.winfo_height()
+            # widget position relative to the scrollable frame
+            try:
+                widget_y = widget.winfo_y()
+                widget_h = widget.winfo_height()
+            except Exception:
+                return
+            # calculate fraction to center the widget
+            target = max(0, widget_y - (canvas_height - widget_h) // 2)
+            fraction = target / total_height
+            self._parent_canvas.yview_moveto(max(0.0, min(1.0, fraction)))
+        else:
+            total_width = bbox[2] - bbox[0]
+            if total_width <= 0:
+                return
+            canvas_width = self._parent_canvas.winfo_width()
+            try:
+                widget_x = widget.winfo_x()
+                widget_w = widget.winfo_width()
+            except Exception:
+                return
+            target = max(0, widget_x - (canvas_width - widget_w) // 2)
+            fraction = target / total_width
+            self._parent_canvas.xview_moveto(max(0.0, min(1.0, fraction)))
+
+    def get_scroll_position(self) -> float:
+        """Get current scroll position as a fraction (0.0 to 1.0)."""
+        if self._orientation == "vertical":
+            return self._parent_canvas.yview()[0]
+        else:
+            return self._parent_canvas.xview()[0]
+
+    def set_scroll_position(self, fraction: float):
+        """Set scroll position as a fraction (0.0 to 1.0)."""
+        fraction = max(0.0, min(1.0, fraction))
+        self._parent_canvas.update_idletasks()
+        if self._orientation == "vertical":
+            self._parent_canvas.yview_moveto(fraction)
+        else:
+            self._parent_canvas.xview_moveto(fraction)
+
     def pack(self, **kwargs):
         self._parent_frame.pack(**kwargs)
 
