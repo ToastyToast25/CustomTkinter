@@ -20,6 +20,7 @@ class DropdownMenu(tkinter.Menu, CTkAppearanceModeBaseClass, CTkScalingBaseClass
                  font: Optional[Union[tuple, CTkFont]] = None,
                  command: Union[Callable, None] = None,
                  values: Optional[List[str]] = None,
+                 max_visible_items: int = 0,
                  **kwargs):
 
         # call init methods of super classes
@@ -41,6 +42,10 @@ class DropdownMenu(tkinter.Menu, CTkAppearanceModeBaseClass, CTkScalingBaseClass
 
         self._values = values
         self._command = command
+        self._max_visible_items = max_visible_items  # 0 = unlimited
+        self._scroll_offset = 0
+        self._last_open_x = 0
+        self._last_open_y = 0
 
         self._add_menu_commands()
 
@@ -88,20 +93,74 @@ class DropdownMenu(tkinter.Menu, CTkAppearanceModeBaseClass, CTkScalingBaseClass
                               font=self._apply_font_scaling(self._font))
 
     def _add_menu_commands(self):
-        """ delete existing menu labels and createe new labels with command according to values list """
+        """ delete existing menu labels and create new labels with command according to values list """
 
         self.delete(0, "end")  # delete all old commands
 
+        if not self._values:
+            return
+
+        needs_scroll = self._max_visible_items > 0 and len(self._values) > self._max_visible_items
+
+        if needs_scroll:
+            # clamp scroll offset
+            max_offset = len(self._values) - self._max_visible_items
+            self._scroll_offset = max(0, min(self._scroll_offset, max_offset))
+            visible = self._values[self._scroll_offset:self._scroll_offset + self._max_visible_items]
+
+            # scroll up indicator
+            if self._scroll_offset > 0:
+                self.add_command(label="\u25B2  Scroll up".ljust(self._min_character_width),
+                                 command=self._scroll_up, compound="left")
+            else:
+                self.add_command(label=" ".ljust(self._min_character_width),
+                                 state="disabled", compound="left")
+        else:
+            visible = self._values
+
         if sys.platform.startswith("linux"):
-            for value in self._values:
+            for value in visible:
                 self.add_command(label="  " + value.ljust(self._min_character_width) + "  ",
                                  command=lambda v=value: self._button_callback(v),
                                  compound="left")
         else:
-            for value in self._values:
+            for value in visible:
                 self.add_command(label=value.ljust(self._min_character_width),
                                  command=lambda v=value: self._button_callback(v),
                                  compound="left")
+
+        if needs_scroll:
+            # scroll down indicator
+            if self._scroll_offset + self._max_visible_items < len(self._values):
+                self.add_command(label="\u25BC  Scroll down".ljust(self._min_character_width),
+                                 command=self._scroll_down, compound="left")
+            else:
+                self.add_command(label=" ".ljust(self._min_character_width),
+                                 state="disabled", compound="left")
+
+    def _scroll_up(self):
+        """ Scroll the visible window up by a page """
+        self._scroll_offset = max(0, self._scroll_offset - self._max_visible_items)
+        self._add_menu_commands()
+        self._reopen()
+
+    def _scroll_down(self):
+        """ Scroll the visible window down by a page """
+        max_offset = len(self._values) - self._max_visible_items
+        self._scroll_offset = min(max_offset, self._scroll_offset + self._max_visible_items)
+        self._add_menu_commands()
+        self._reopen()
+
+    def _reopen(self):
+        """ Close and reopen the menu at the same position to reflect scroll changes """
+        try:
+            self.unpost()
+            if sys.platform == "darwin" or sys.platform.startswith("win"):
+                self.post(int(self._last_open_x), int(self._last_open_y))
+            else:
+                self.tk_popup(int(self._last_open_x), int(self._last_open_y))
+        except Exception:
+            pass
 
     def _button_callback(self, value):
         if self._command is not None:
@@ -118,6 +177,8 @@ class DropdownMenu(tkinter.Menu, CTkAppearanceModeBaseClass, CTkScalingBaseClass
         try:
             screen_height = self.winfo_screenheight()
             item_count = len(self._values) if self._values else 0
+            if self._max_visible_items > 0:
+                item_count = min(item_count, self._max_visible_items + 2)  # +2 for scroll arrows
             estimated_item_height = self._apply_widget_scaling(28)
             estimated_height = item_count * estimated_item_height + self._apply_widget_scaling(8)
 
@@ -125,6 +186,13 @@ class DropdownMenu(tkinter.Menu, CTkAppearanceModeBaseClass, CTkScalingBaseClass
                 y = y - estimated_height - self._apply_widget_scaling(6)
         except Exception:
             pass
+
+        # reset scroll offset on fresh open and rebuild menu
+        self._scroll_offset = 0
+        self._add_menu_commands()
+
+        self._last_open_x = x
+        self._last_open_y = y
 
         if sys.platform == "darwin" or sys.platform.startswith("win"):
             self.post(int(x), int(y))
@@ -138,6 +206,11 @@ class DropdownMenu(tkinter.Menu, CTkAppearanceModeBaseClass, CTkScalingBaseClass
         return bool(self.winfo_viewable())
 
     def configure(self, **kwargs):
+        if "max_visible_items" in kwargs:
+            self._max_visible_items = kwargs.pop("max_visible_items")
+            self._scroll_offset = 0
+            self._add_menu_commands()
+
         if "min_character_width" in kwargs:
             self._min_character_width = kwargs.pop("min_character_width")
             self._add_menu_commands()
@@ -172,7 +245,9 @@ class DropdownMenu(tkinter.Menu, CTkAppearanceModeBaseClass, CTkScalingBaseClass
         super().configure(**kwargs)
 
     def cget(self, attribute_name: str) -> any:
-        if attribute_name == "min_character_width":
+        if attribute_name == "max_visible_items":
+            return self._max_visible_items
+        elif attribute_name == "min_character_width":
             return self._min_character_width
 
         elif attribute_name == "fg_color":

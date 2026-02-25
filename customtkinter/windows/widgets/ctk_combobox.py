@@ -43,6 +43,7 @@ class CTkComboBox(CTkBaseClass):
                  variable: Union[tkinter.Variable, None] = None,
                  command: Union[Callable[[str], Any], None] = None,
                  justify: str = "left",
+                 max_dropdown_items: int = 0,
                  **kwargs):
 
         # transfer basic functionality (_bg_color, size, __appearance_mode, scaling) to CTkBaseClass
@@ -82,7 +83,8 @@ class CTkComboBox(CTkBaseClass):
                                            fg_color=dropdown_fg_color,
                                            hover_color=dropdown_hover_color,
                                            text_color=dropdown_text_color,
-                                           font=dropdown_font)
+                                           font=dropdown_font,
+                                           max_visible_items=max_dropdown_items)
         self._close_on_next_click: bool = False
 
         # configure grid system (1x1)
@@ -274,6 +276,9 @@ class CTkComboBox(CTkBaseClass):
         if "dropdown_font" in kwargs:
             self._dropdown_menu.configure(font=kwargs.pop("dropdown_font"))
 
+        if "max_dropdown_items" in kwargs:
+            self._dropdown_menu.configure(max_visible_items=kwargs.pop("max_dropdown_items"))
+
         if "values" in kwargs:
             self._values = kwargs.pop("values")
             self._dropdown_menu.configure(values=self._values)
@@ -339,6 +344,8 @@ class CTkComboBox(CTkBaseClass):
             return self._command
         elif attribute_name == "justify":
             return self._entry.cget("justify")
+        elif attribute_name == "max_dropdown_items":
+            return self._dropdown_menu.cget("max_visible_items")
 
         else:
             return super().cget(attribute_name)
