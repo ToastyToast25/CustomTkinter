@@ -15,3 +15,4 @@ from .ctk_tabview import CTkTabview
 from .ctk_textbox import CTkTextbox
 from .ctk_scrollable_frame import CTkScrollableFrame
 from .ctk_toast import CTkToast
+from .ctk_skeleton import CTkSkeleton
