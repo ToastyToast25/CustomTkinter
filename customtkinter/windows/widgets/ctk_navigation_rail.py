@@ -1,4 +1,3 @@
-import copy
 import tkinter
 from typing import Union, Tuple, List, Dict, Callable, Optional, Any
 
@@ -300,7 +299,7 @@ class CTkNavigationRail(CTkBaseClass):
 
     def _count_drawable_items(self, items: List[Dict[str, Any]]) -> int:
         """Count items that take up a full row (excluding separators as separate rows)."""
-        return len([i for i in items if i.get("name") != "__separator__"])
+        return sum(1 for i in items if i.get("name") != "__separator__")
 
     def _draw_item_section(self, items, y_offset, item_h, total_width, indicator_w, border_w,
                            is_compact, active_bg, active_fg, hover_bg, text_color_normal,
@@ -577,10 +576,13 @@ class CTkNavigationRail(CTkBaseClass):
     # Public API
     # ------------------------------------------------------------------
 
+    def _get_all_names(self) -> set:
+        """Return a set of all navigable item names (excluding separators)."""
+        return {i["name"] for i in self._items + self._bottom_items if i.get("name") != "__separator__"}
+
     def set_active(self, name: str):
         """Set the active (selected) navigation item by name."""
-        all_names = [i["name"] for i in self._items + self._bottom_items if i.get("name") != "__separator__"]
-        if name not in all_names:
+        if name not in self._get_all_names():
             raise ValueError(f"CTkNavigationRail has no item named '{name}'")
         if name != self._current_value:
             self._current_value = name
@@ -592,8 +594,7 @@ class CTkNavigationRail(CTkBaseClass):
 
     def set_badge(self, name: str, count: int):
         """Set or update the badge count for the given item."""
-        all_names = [i["name"] for i in self._items + self._bottom_items if i.get("name") != "__separator__"]
-        if name not in all_names:
+        if name not in self._get_all_names():
             raise ValueError(f"CTkNavigationRail has no item named '{name}'")
         if count > 0:
             self._badges[name] = count
@@ -797,9 +798,9 @@ class CTkNavigationRail(CTkBaseClass):
             return self._separator_color
 
         elif attribute_name == "items":
-            return copy.deepcopy(self._items)
+            return [d.copy() for d in self._items]
         elif attribute_name == "bottom_items":
-            return copy.deepcopy(self._bottom_items)
+            return [d.copy() for d in self._bottom_items]
         elif attribute_name == "command":
             return self._command
         elif attribute_name == "compact":

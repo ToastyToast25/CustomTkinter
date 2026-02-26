@@ -130,6 +130,7 @@ class CTkDataTable(CTkBaseClass):
 
         # data state
         self._columns: List[Dict[str, Any]] = []
+        self._cached_total_width: int = 0
         self._data: List[Dict[str, Any]] = []
         self._display_data: List[Dict[str, Any]] = []  # sorted/paginated view
         self._display_indices: List[int] = []  # original indices of display_data rows
@@ -456,7 +457,7 @@ class CTkDataTable(CTkBaseClass):
         hover_color = self._apply_appearance_mode(self._row_hover_color)
         selected_color = self._apply_appearance_mode(self._row_selected_color)
 
-        total_width = sum(c.get("width", 100) for c in self._columns)
+        total_width = self._cached_total_width
 
         for display_row, row_data in enumerate(self._display_data):
             original_idx = self._display_indices[display_row]
@@ -658,7 +659,7 @@ class CTkDataTable(CTkBaseClass):
 
     def _update_scroll_region(self):
         """Update the body canvas scroll region based on data dimensions."""
-        total_width = sum(c.get("width", 100) for c in self._columns) if self._columns else self._desired_width
+        total_width = self._cached_total_width if self._columns else self._desired_width
         total_height = len(self._display_data) * self._ROW_HEIGHT if self._display_data else 0
 
         self._body_canvas.configure(scrollregion=(0, 0, total_width, total_height))
@@ -741,6 +742,7 @@ class CTkDataTable(CTkBaseClass):
         dx = event.x - self._resize_start_x
         new_width = max(self._MIN_COLUMN_WIDTH, self._resize_start_width + dx)
         self._columns[self._resize_col_index]["width"] = new_width
+        self._cached_total_width = sum(c.get("width", 100) for c in self._columns)
         self._redraw_table()
 
     def _on_header_release(self, event):
@@ -912,6 +914,7 @@ class CTkDataTable(CTkBaseClass):
             }
             self._columns.append(col)
 
+        self._cached_total_width = sum(c.get("width", 100) for c in self._columns)
         self._sort_column = None
         self._sort_reverse = False
         self._redraw_table()

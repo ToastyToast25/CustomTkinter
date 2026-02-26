@@ -344,7 +344,6 @@ class CTkSplitView(CTkBaseClass):
 
     def _draw_grip(self):
         """Draw small grip dots/lines on the divider to indicate it is draggable."""
-        self._grip_canvas.delete("all")
         grip_fill = self._apply_appearance_mode(self._grip_color)
         canvas_bg = self._apply_appearance_mode(self._divider_color)
         self._grip_canvas.configure(bg=canvas_bg)
@@ -352,30 +351,37 @@ class CTkSplitView(CTkBaseClass):
         cw = self._grip_canvas.winfo_reqwidth()
         ch = self._grip_canvas.winfo_reqheight()
 
+        # Compute coordinates for 3 grip lines
+        coords_list = []
         if self._orientation == "horizontal":
-            # draw 3 small horizontal lines centered vertically
             cx = cw / 2
             cy = ch / 2
             line_half_len = max(2, (cw - 4) / 2)
             spacing = max(3, ch * 0.15)
             for i in range(-1, 2):
                 y = cy + i * spacing
-                self._grip_canvas.create_line(
-                    cx - line_half_len, y, cx + line_half_len, y,
-                    fill=grip_fill, width=1, tags="grip",
-                )
+                coords_list.append((cx - line_half_len, y, cx + line_half_len, y))
         else:
-            # draw 3 small vertical lines centered horizontally
             cx = cw / 2
             cy = ch / 2
             line_half_len = max(2, (ch - 4) / 2)
             spacing = max(3, cw * 0.15)
             for i in range(-1, 2):
                 x = cx + i * spacing
-                self._grip_canvas.create_line(
-                    x, cy - line_half_len, x, cy + line_half_len,
-                    fill=grip_fill, width=1, tags="grip",
-                )
+                coords_list.append((x, cy - line_half_len, x, cy + line_half_len))
+
+        # Reuse existing line items or create on first call
+        if not hasattr(self, "_grip_line_ids") or len(self._grip_line_ids) != 3:
+            self._grip_canvas.delete("grip")
+            self._grip_line_ids = []
+            for c in coords_list:
+                lid = self._grip_canvas.create_line(
+                    *c, fill=grip_fill, width=1, tags="grip")
+                self._grip_line_ids.append(lid)
+        else:
+            for lid, c in zip(self._grip_line_ids, coords_list):
+                self._grip_canvas.coords(lid, *c)
+                self._grip_canvas.itemconfigure(lid, fill=grip_fill)
 
     # ──────────────────────────── collapse icon ─────────────────────────
 

@@ -64,6 +64,16 @@ from .windows.widgets import CTkRating
 from .windows.widgets import CTkAvatar
 from .windows.widgets import CTkStepper
 from .windows.widgets import CTkAccordion
+from .windows.widgets import CTkPaginator
+from .windows.widgets import CTkSpinbox
+from .windows.widgets import CTkTagInput
+from .windows.widgets import CTkGauge
+from .windows.widgets import CTkCalendarView
+from .windows.widgets import CTkShadowFrame
+from .windows.widgets import CTkGradientFrame
+from .windows.widgets import CTkIcon
+from .windows.widgets import CTkAnimatedFrame
+from .windows.widgets import CTkFrostedFrame
 from .windows.widgets import CTkDevTools, CTkConfigError, CTkConfigWarning
 
 # import windows
@@ -73,9 +83,16 @@ from .windows import CTkInputDialog
 
 # import font classes
 from .windows.widgets.font import CTkFont
+from .windows.widgets.font import CTkFontScale
 
 # import image classes
 from .windows.widgets.image import CTkImage
+
+# import utilities & enhancements
+from .windows.widgets.utility import CTkAnimation, Easing, lerp, lerp_color
+from .windows.widgets.utility import ColorUtils
+from .windows.widgets.utility.ctk_focus_ring import CTkFocusRing
+from .windows.widgets.utility.ctk_ripple import CTkRipple
 
 from .windows import ctk_tk
 

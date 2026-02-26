@@ -43,4 +43,21 @@ from .ctk_rating import CTkRating
 from .ctk_avatar import CTkAvatar
 from .ctk_stepper import CTkStepper
 from .ctk_accordion import CTkAccordion
+from .ctk_paginator import CTkPaginator
+from .ctk_spinbox import CTkSpinbox
+from .ctk_tag_input import CTkTagInput
+from .ctk_gauge import CTkGauge
+from .ctk_calendar_view import CTkCalendarView
+from .ctk_shadow_frame import CTkShadowFrame
+from .ctk_gradient_frame import CTkGradientFrame
+from .ctk_icon import CTkIcon
+from .ctk_animated_frame import CTkAnimatedFrame
+from .ctk_frosted_frame import CTkFrostedFrame
 from .ctk_dev_tools import CTkDevTools, CTkConfigError, CTkConfigWarning
+
+# Utilities & enhancements
+from .utility.ctk_animation import CTkAnimation, Easing, lerp, lerp_color
+from .utility.ctk_color_utils import ColorUtils
+from .utility.ctk_focus_ring import CTkFocusRing
+from .utility.ctk_ripple import CTkRipple
+from .font.ctk_font_scale import CTkFontScale

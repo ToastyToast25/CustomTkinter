@@ -2,6 +2,7 @@ import os
 import sys
 
 from .ctk_font import CTkFont
+from .ctk_font_scale import CTkFontScale
 from .font_manager import FontManager
 
 # import DrawEngine to set preferred_drawing_method if loading shapes font fails

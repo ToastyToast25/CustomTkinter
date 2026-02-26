@@ -106,9 +106,11 @@ class CTkCanvas(tkinter.Canvas):
             super().itemconfigure(tag_or_id, *args, **kwargs)
             return
 
-        kwargs_except_outline = kwargs.copy()
-        if "outline" in kwargs_except_outline:
-            del kwargs_except_outline["outline"]
+        has_outline = "outline" in kwargs
+        if has_outline:
+            kwargs_except_outline = {k: v for k, v in kwargs.items() if k != "outline"}
+        else:
+            kwargs_except_outline = kwargs  # no copy needed
 
         if type(tag_or_id) == int:
             if tag_or_id in self._aa_circle_canvas_ids:

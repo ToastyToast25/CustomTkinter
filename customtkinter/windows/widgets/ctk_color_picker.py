@@ -333,6 +333,9 @@ class CTkColorPicker(CTkBaseClass):
         self._sv_square_image.put(" ".join(row_data), to=(0, 0))
 
         self._sv_canvas.delete("all")
+        # Reset cached marker IDs since delete("all") removed them
+        self._sv_outer_id = None
+        self._sv_inner_id = None
         self._sv_canvas.create_image(0, 0, anchor="nw", image=self._sv_square_image)
 
         # Draw SV crosshair marker
@@ -340,24 +343,22 @@ class CTkColorPicker(CTkBaseClass):
 
     def _draw_hue_marker(self):
         """Draw a horizontal indicator on the hue bar at the current hue."""
-        self._hue_canvas.delete("hue_marker")
         y = int(self._hue * self._hue_bar_height)
         y = max(0, min(self._hue_bar_height - 1, y))
         w = self._hue_bar_width
 
-        # Draw two small triangles / arrows on each side
-        self._hue_canvas.create_line(
-            0, y, w, y,
-            fill="#ffffff", width=2, tags="hue_marker"
-        )
-        self._hue_canvas.create_rectangle(
-            0, y - 1, w, y + 1,
-            outline="#000000", width=1, tags="hue_marker"
-        )
+        if not hasattr(self, "_hue_line_id") or self._hue_line_id is None:
+            self._hue_canvas.delete("hue_marker")
+            self._hue_line_id = self._hue_canvas.create_line(
+                0, y, w, y, fill="#ffffff", width=2, tags="hue_marker")
+            self._hue_rect_id = self._hue_canvas.create_rectangle(
+                0, y - 1, w, y + 1, outline="#000000", width=1, tags="hue_marker")
+        else:
+            self._hue_canvas.coords(self._hue_line_id, 0, y, w, y)
+            self._hue_canvas.coords(self._hue_rect_id, 0, y - 1, w, y + 1)
 
     def _draw_sv_marker(self):
         """Draw a crosshair circle on the SV square at the current sat/val."""
-        self._sv_canvas.delete("sv_marker")
         size = self._sv_size
         x = int(self._saturation * size)
         y = int((1.0 - self._value) * size)
@@ -366,16 +367,19 @@ class CTkColorPicker(CTkBaseClass):
 
         radius = 5
 
-        # Outer circle (black) for contrast
-        self._sv_canvas.create_oval(
-            x - radius, y - radius, x + radius, y + radius,
-            outline="#000000", width=2, tags="sv_marker"
-        )
-        # Inner circle (white)
-        self._sv_canvas.create_oval(
-            x - radius + 1, y - radius + 1, x + radius - 1, y + radius - 1,
-            outline="#ffffff", width=1, tags="sv_marker"
-        )
+        if not hasattr(self, "_sv_outer_id") or self._sv_outer_id is None:
+            self._sv_canvas.delete("sv_marker")
+            self._sv_outer_id = self._sv_canvas.create_oval(
+                x - radius, y - radius, x + radius, y + radius,
+                outline="#000000", width=2, tags="sv_marker")
+            self._sv_inner_id = self._sv_canvas.create_oval(
+                x - radius + 1, y - radius + 1, x + radius - 1, y + radius - 1,
+                outline="#ffffff", width=1, tags="sv_marker")
+        else:
+            self._sv_canvas.coords(self._sv_outer_id,
+                                   x - radius, y - radius, x + radius, y + radius)
+            self._sv_canvas.coords(self._sv_inner_id,
+                                   x - radius + 1, y - radius + 1, x + radius - 1, y + radius - 1)
 
     # ══════════════════════════════════════════════════════════════════
     #  EVENT HANDLERS
