@@ -516,6 +516,9 @@ class CTkGradientFrame(CTkBaseClass):
             return self._from_color
         elif attribute_name == "to_color":
             return self._to_color
+        elif attribute_name == "fg_color":
+            # Return from_color so child widgets can detect parent background
+            return self._from_color
         elif attribute_name == "border_color":
             return self._border_color
         elif attribute_name == "orientation":

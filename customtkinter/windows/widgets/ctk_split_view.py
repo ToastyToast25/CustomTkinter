@@ -166,7 +166,7 @@ class CTkSplitView(CTkBaseClass):
         self._place_layout()
 
         # listen for resize events on the container
-        super().bind("<Configure>", self._on_configure, add=True)
+        tkinter.Frame.bind(self, "<Configure>", self._on_configure, add=True)
 
     # ──────────────────────────── properties ────────────────────────────
 

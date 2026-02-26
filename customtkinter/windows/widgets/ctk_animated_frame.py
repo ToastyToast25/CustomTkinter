@@ -105,7 +105,7 @@ class CTkAnimatedFrame(CTkBaseClass):
             try:
                 self._outer_frame.configure(bg=fg)
                 self._clip_frame.configure(bg=fg)
-                self.configure(bg=fg)
+                tkinter.Frame.configure(self, bg=fg)
             except TclError:
                 pass
 

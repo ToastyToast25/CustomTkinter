@@ -279,7 +279,7 @@ class CTkCalendarView(CTkBaseClass):
         self._canvas.configure(bg=fg)
 
         # ---- Configure widget bg ----
-        super().configure(bg=fg)
+        tkinter.Frame.configure(self, bg=fg)
 
         # ---- Draw calendar grid on canvas ----
         self._draw_grid(

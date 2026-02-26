@@ -1114,8 +1114,8 @@ class WidgetDemo(ctk.CTk):
                 frame = ctk.CTkFrame(row, fg_color="transparent", width=60)
                 frame.pack(side="left", padx=4, pady=4)
                 frame.pack_propagate(False)
-                ctk.CTkIcon(frame, text=ICONS[name], size=22,
-                             text_color=("#333333", "#e0e0e0")).pack()
+                ctk.CTkIcon(frame, icon=name, size=22,
+                             color=("#333333", "#e0e0e0")).pack()
                 ctk.CTkLabel(frame, text=name, font=ctk.CTkFont(size=9),
                               text_color=("gray50", "gray60")).pack()
 
@@ -1127,8 +1127,8 @@ class WidgetDemo(ctk.CTk):
         click_lbl.pack(side="left", padx=(0, 8))
 
         for name in ("home", "settings", "star", "heart"):
-            ctk.CTkIcon(row2, text=ICONS[name], size=28,
-                         text_color=("#3B82F6", "#60A5FA"),
+            ctk.CTkIcon(row2, icon=name, size=28,
+                         color=("#3B82F6", "#60A5FA"),
                          hover_color=("#2563EB", "#93C5FD"),
                          command=lambda n=name: click_lbl.configure(text=f"Clicked: {n}")
                          ).pack(side="left", padx=6)
@@ -1194,22 +1194,22 @@ class WidgetDemo(ctk.CTk):
         frost1 = ctk.CTkFrostedFrame(bg, width=200, height=100, tint_opacity=0.12,
                                       border_opacity=0.3, corner_radius=10)
         frost1.place(x=30, y=50)
-        ctk.CTkLabel(frost1, text="Frosted Panel",
-                      text_color="white", font=ctk.CTkFont(weight="bold")).pack(expand=True)
+        tkinter.Label(frost1.interior, text="Frosted Panel", bg=frost1.interior.cget("bg"),
+                       fg="white", font=("Helvetica", 12, "bold")).pack(expand=True)
 
         frost2 = ctk.CTkFrostedFrame(bg, width=200, height=100, tint_opacity=0.08,
                                       border_opacity=0.2, noise=True, corner_radius=10)
         frost2.place(x=260, y=50)
-        ctk.CTkLabel(frost2, text="With Noise",
-                      text_color="white", font=ctk.CTkFont(weight="bold")).pack(expand=True)
+        tkinter.Label(frost2.interior, text="With Noise", bg=frost2.interior.cget("bg"),
+                       fg="white", font=("Helvetica", 12, "bold")).pack(expand=True)
 
         frost3 = ctk.CTkFrostedFrame(bg, width=180, height=100,
                                       tint_color=("#FF6B6B", "#FF6B6B"),
                                       tint_opacity=0.15, border_opacity=0.35,
                                       corner_radius=10)
         frost3.place(x=490, y=50)
-        ctk.CTkLabel(frost3, text="Tinted Frost",
-                      text_color="white", font=ctk.CTkFont(weight="bold")).pack(expand=True)
+        tkinter.Label(frost3.interior, text="Tinted Frost", bg=frost3.interior.cget("bg"),
+                       fg="white", font=("Helvetica", 12, "bold")).pack(expand=True)
 
     # ================================================================
     # CTkFocusRing (Utility)

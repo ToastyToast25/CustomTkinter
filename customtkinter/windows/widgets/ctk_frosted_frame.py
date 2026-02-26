@@ -230,6 +230,9 @@ class CTkFrostedFrame(CTkBaseClass):
     def cget(self, attribute_name: str):
         if attribute_name == "corner_radius":
             return self._corner_radius
+        elif attribute_name == "fg_color":
+            # Return tint_color so child widgets can detect parent background
+            return self._tint_color
         elif attribute_name == "border_width":
             return self._border_width
         elif attribute_name == "tint_color":
