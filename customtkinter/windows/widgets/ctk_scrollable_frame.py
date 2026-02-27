@@ -21,6 +21,7 @@ class CTkScrollableFrame(tkinter.Frame, CTkAppearanceModeBaseClass, CTkScalingBa
     _instances: list = []
     _canvas_to_instance: dict = {}  # O(1) lookup: canvas widget id -> instance
     _global_bindings_set: bool = False
+    _shift_pressed_global: bool = False
 
     @classmethod
     def _ensure_global_bindings(cls, widget):
@@ -72,13 +73,11 @@ class CTkScrollableFrame(tkinter.Frame, CTkAppearanceModeBaseClass, CTkScalingBa
 
     @classmethod
     def _dispatch_shift_press(cls, event):
-        for instance in cls._instances:
-            instance._shift_pressed = True
+        cls._shift_pressed_global = True
 
     @classmethod
     def _dispatch_shift_release(cls, event):
-        for instance in cls._instances:
-            instance._shift_pressed = False
+        cls._shift_pressed_global = False
 
     def __init__(self,
                  master: Any,
@@ -155,7 +154,6 @@ class CTkScrollableFrame(tkinter.Frame, CTkAppearanceModeBaseClass, CTkScalingBa
 
         self._scroll_anim_id = None
         self._on_scroll_callback = scroll_command
-        self._shift_pressed = False
 
     def _scroll_command_wrapper(self, *args):
         """Wrapper for yscrollcommand/xscrollcommand that updates scrollbar and fires callback."""
@@ -350,35 +348,31 @@ class CTkScrollableFrame(tkinter.Frame, CTkAppearanceModeBaseClass, CTkScalingBa
             self._parent_canvas.configure(xscrollincrement=30, yscrollincrement=30)
 
     def _mouse_wheel_all(self, event):
-        if self.check_if_master_is_canvas(event.widget):
-            if sys.platform.startswith("win"):
-                if self._shift_pressed:
-                    if self._parent_canvas.xview() != (0.0, 1.0):
-                        self._parent_canvas.xview("scroll", -int(event.delta / 6), "units")
-                else:
-                    if self._parent_canvas.yview() != (0.0, 1.0):
-                        self._parent_canvas.yview("scroll", -int(event.delta / 6), "units")
-            elif sys.platform == "darwin":
-                if self._shift_pressed:
-                    if self._parent_canvas.xview() != (0.0, 1.0):
-                        self._parent_canvas.xview("scroll", -event.delta, "units")
-                else:
-                    if self._parent_canvas.yview() != (0.0, 1.0):
-                        self._parent_canvas.yview("scroll", -event.delta, "units")
+        # The class-level _dispatch_mouse_wheel already verified this instance
+        # owns the widget via _canvas_to_instance, so skip the redundant
+        # check_if_master_is_canvas ancestry walk.
+        shift = type(self)._shift_pressed_global
+        if sys.platform.startswith("win"):
+            if shift:
+                if self._parent_canvas.xview() != (0.0, 1.0):
+                    self._parent_canvas.xview("scroll", -int(event.delta / 6), "units")
             else:
-                if self._shift_pressed:
-                    if self._parent_canvas.xview() != (0.0, 1.0):
-                        self._parent_canvas.xview_scroll(-1 if event.num == 4 else 1, "units")
-                else:
-                    if self._parent_canvas.yview() != (0.0, 1.0):
-                        self._parent_canvas.yview_scroll(-1 if event.num == 4 else 1, "units")
-
-
-    def _keyboard_shift_press_all(self, event):
-        self._shift_pressed = True
-
-    def _keyboard_shift_release_all(self, event):
-        self._shift_pressed = False
+                if self._parent_canvas.yview() != (0.0, 1.0):
+                    self._parent_canvas.yview("scroll", -int(event.delta / 6), "units")
+        elif sys.platform == "darwin":
+            if shift:
+                if self._parent_canvas.xview() != (0.0, 1.0):
+                    self._parent_canvas.xview("scroll", -event.delta, "units")
+            else:
+                if self._parent_canvas.yview() != (0.0, 1.0):
+                    self._parent_canvas.yview("scroll", -event.delta, "units")
+        else:
+            if shift:
+                if self._parent_canvas.xview() != (0.0, 1.0):
+                    self._parent_canvas.xview_scroll(-1 if event.num == 4 else 1, "units")
+            else:
+                if self._parent_canvas.yview() != (0.0, 1.0):
+                    self._parent_canvas.yview_scroll(-1 if event.num == 4 else 1, "units")
 
     def check_if_master_is_canvas(self, widget, _depth=0):
         if _depth > 50:
